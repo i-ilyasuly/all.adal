@@ -1,6 +1,7 @@
 import functions_framework
 import uuid
-from bot_sender import send_message, edit_message, answer_callback, answer_inline_query, download_photo
+# ЖАҢА ИМПОРТ: edit_reply_markup қосылды
+from bot_sender import send_message, edit_message, edit_reply_markup, answer_callback, answer_inline_query, download_photo
 from db_core import (add_user, save_chat_history, log_to_bigquery, get_item_by_id, 
                      check_access, increment_usage, revoke_premium, clear_cache, 
                      get_user_gender, set_user_gender)
@@ -29,24 +30,21 @@ def telegram_webhook(request):
             process_pre_checkout(update)
             return "OK", 200
 
+        # --- CALLBACK QUERY ---
         if "callback_query" in update:
             cb = update["callback_query"]
-            
             user_id = cb["from"]["id"] 
             data = cb["data"]
             
             is_inline = "inline_message_id" in cb
-            
             if is_inline:
                 chat_id = None
                 message_id = None
                 inline_msg_id = cb["inline_message_id"]
-                msg_text = "Инлайн нәтиже" 
             else:
                 chat_id = cb["message"]["chat"]["id"]
                 message_id = cb["message"]["message_id"]
                 inline_msg_id = None
-                msg_text = cb["message"].get("text", "Мәтін жоқ")
             
             if data == "buy_premium":
                 answer_callback(cb["id"])
@@ -85,25 +83,81 @@ def telegram_webhook(request):
                 else:
                     answer_callback(cb["id"], text="Мәлімет табылмады 😔", show_alert=True)
 
-            elif data == "fb:good":
+            # --- ЖАҢА ЛАЙК ЛОГИКАСЫ ---
+            elif data.startswith("fb:good"):
                 answer_callback(cb["id"], text="Пікіріңізге рақмет! ❤️")
                 log_to_bigquery(user_id, "feedback", "👍 Пайдалы", "Кері байланыс")
-                edit_message(chat_id, message_id, f"{msg_text}\n\n<i>(Пікір: 👍 Пайдалы)</i>", inline_message_id=inline_msg_id)
+                
+                new_kb = []
+                if not is_inline:
+                    existing_kb = cb["message"].get("reply_markup", {}).get("inline_keyboard",[])
+                    for row in existing_kb:
+                        new_row =[btn for btn in row if not (btn.get("callback_data", "").startswith("fb:"))]
+                        if new_row: new_kb.append(new_row)
+                else:
+                    parts = data.split(":")
+                    if len(parts) >= 5 and parts[2] == "itm":
+                        t_code, item_id = parts[3], parts[4]
+                        item = get_item_by_id(t_code, item_id)
+                        if item and item.get("map_link"):
+                            new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"]}])
+                            
+                edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
 
-            elif data == "fb:bad":
+            # --- ЖАҢА ДИЗЛАЙК ЛОГИКАСЫ ---
+            elif data.startswith("fb:bad"):
                 answer_callback(cb["id"])
-                reasons_markup = {"inline_keyboard": [[{"text": "📝 Қате ақпарат", "callback_data": "fb:reason:Қате_ақпарат"}],[{"text": "🤖 ЖИ қатесі", "callback_data": "fb:reason:ЖИ_қатесі"}],[{"text": "❌ Басқа", "callback_data": "fb:reason:Басқа"}]]}
-                edit_message(chat_id, message_id, f"{msg_text}\n\n👇 <b>Нақты қандай қате кетті? Оны тез арада түзетеміз:</b>", reply_markup=reasons_markup, inline_message_id=inline_msg_id)
+                
+                new_kb =[]
+                if not is_inline:
+                    existing_kb = cb["message"].get("reply_markup", {}).get("inline_keyboard", [])
+                    for row in existing_kb:
+                        url_row =[btn for btn in row if "url" in btn]
+                        if url_row: new_kb.append(url_row)
+                else:
+                    parts = data.split(":")
+                    if len(parts) >= 5 and parts[2] == "itm":
+                        t_code, item_id = parts[3], parts[4]
+                        item = get_item_by_id(t_code, item_id)
+                        if item and item.get("map_link"):
+                            new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"]}])
+                
+                # "fb:bad:" дегенді кесіп алып, себептердің астына жалғаймыз
+                suffix = data[7:] 
+                
+                new_kb.append([{"text": "📝 Қате ақпарат", "callback_data": f"fb:reason:info:{suffix}"}])
+                new_kb.append([{"text": "🤖 ЖИ қатесі", "callback_data": f"fb:reason:ai:{suffix}"}])
+                new_kb.append([{"text": "❌ Басқа", "callback_data": f"fb:reason:other:{suffix}"}])
+                
+                edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
 
+            # --- СЕБЕПТІ ТАҢДАҒАНДА ---
             elif data.startswith("fb:reason:"):
                 parts = data.split(":")
-                reason = parts[2]
-                answer_callback(cb["id"], text="Рақмет! Түзетеміз 🛠")
-                log_to_bigquery(user_id, "feedback", f"👎 Қате ({reason})", "Кері байланыс")
-                edit_message(chat_id, message_id, f"{msg_text}\n\n<i>(Пікір: 👎 {reason})</i>", inline_message_id=inline_msg_id)
+                reason_code = parts[2]
+                reason_text = "Қате ақпарат" if reason_code == "info" else "ЖИ қатесі" if reason_code == "ai" else "Басқа"
+                
+                answer_callback(cb["id"], text="Рақмет! Түзетеміз 🛠", show_alert=True)
+                log_to_bigquery(user_id, "feedback", f"👎 Қате ({reason_text})", "Кері байланыс")
+                
+                new_kb = []
+                if not is_inline:
+                    existing_kb = cb["message"].get("reply_markup", {}).get("inline_keyboard",[])
+                    for row in existing_kb:
+                        url_row = [btn for btn in row if "url" in btn]
+                        if url_row: new_kb.append(url_row)
+                else:
+                    if len(parts) >= 6 and parts[3] == "itm":
+                        t_code, item_id = parts[4], parts[5]
+                        item = get_item_by_id(t_code, item_id)
+                        if item and item.get("map_link"):
+                            new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"]}])
+                            
+                edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
 
             return "OK", 200
 
+        # --- INLINE ІЗДЕУ ---
         elif "inline_query" in update:
             inline_query_id = update["inline_query"]["id"]
             query_text = update["inline_query"]["query"].strip()
@@ -146,6 +200,7 @@ def telegram_webhook(request):
             else:
                 answer_inline_query(inline_query_id,[], button=prompt_button)
 
+        # --- ХАТТАР ЖӘНЕ СУРЕТТЕР ---
         elif "message" in update:
             msg = update["message"]
             chat_id = msg["chat"]["id"]
@@ -258,11 +313,12 @@ def telegram_webhook(request):
                         
                         if wait_msg_id:
                             ai_reply = chat_with_ai(chat_id, text, is_symbat, chat_id=chat_id, message_id=wait_msg_id)
-                            keys = {"inline_keyboard": [[{"text": "👍 Пайдалы", "callback_data": "fb:good"}, {"text": "👎 Қате", "callback_data": "fb:bad"}]]}
+                            # ЖАҢА: AI жауаптарына да AI маркері қойылды
+                            keys = {"inline_keyboard": [[{"text": "👍 Пайдалы", "callback_data": "fb:good:ai"}, {"text": "👎 Қате", "callback_data": "fb:bad:ai"}]]}
                             edit_message(chat_id, wait_msg_id, ai_reply, reply_markup=keys)
                         else:
                             ai_reply = chat_with_ai(chat_id, text, is_symbat)
-                            keys = {"inline_keyboard": [[{"text": "👍 Пайдалы", "callback_data": "fb:good"}, {"text": "👎 Қате", "callback_data": "fb:bad"}]]}
+                            keys = {"inline_keyboard": [[{"text": "👍 Пайдалы", "callback_data": "fb:good:ai"}, {"text": "👎 Қате", "callback_data": "fb:bad:ai"}]]}
                             send_message(chat_id, ai_reply, reply_markup=keys)
                             
                         save_chat_history(chat_id, "model", ai_reply)
