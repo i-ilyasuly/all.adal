@@ -67,7 +67,7 @@ def get_nearby_companies(user_lat, user_lon, page=1):
     nearby.sort(key=lambda x: x["dist"])
     total_items = len(nearby)
     if total_items == 0:
-        return "😔 Кешірші досым, жақын маңда Халал мекемелер таппадым.", None
+        return "😔 Өкінішке орай, 50 км радиуста сертификаты бар халал орындар табылмады. Басқа аумақты тексеріп көресіз бе?", None
         
     per_page = 5
     total_pages = math.ceil(total_items / per_page)
@@ -152,7 +152,6 @@ def search_data(query_text):
         is_match = False
         for var in variants:
             v_clean = clean_text(var)
-            # ЖАҢА: len(v_clean) > 3 етіп қатайттық, ұсақ сөздерге (OAT) алданбау үшін
             if (v_clean in t_clean and len(v_clean)>3) or (v_clean in l_clean and len(v_clean)>3): is_match = True; break
             if fuzz.partial_ratio(var, title.lower()) > 80 or fuzz.partial_ratio(var, legal.lower()) > 80: is_match = True; break
         
