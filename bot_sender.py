@@ -1,14 +1,28 @@
 import requests
 from config import BOT_TOKEN
 
-def send_message(chat_id, text, reply_markup=None):
+def send_message(chat_id, text, reply_markup=None, message_effect_id=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if reply_markup: payload["reply_markup"] = reply_markup
+    if message_effect_id: payload["message_effect_id"] = str(message_effect_id)
     
     resp = requests.post(url, json=payload).json()
+    
+    # ЕГЕР БӘРІ СӘТТІ ЖІБЕРІЛСЕ:
     if resp.get("ok"):
         return resp["result"]["message_id"]
+        
+    # ЖАҢА ҚОРҒАНЫС: Егер эффектіден қате шықса (мысалы 400 Bad Request)
+    elif message_effect_id:
+        print(f"Telegram Эффект қабылдамады: {resp}") # Лог үшін
+        del payload["message_effect_id"] # Эффектіні алып тастаймыз
+        
+        # Эффектісіз ЖАЙ ҒАНА ХАТ қылып қайта жібереміз
+        resp2 = requests.post(url, json=payload).json()
+        if resp2.get("ok"):
+            return resp2["result"]["message_id"]
+            
     return None
 
 def edit_message(chat_id=None, message_id=None, text=None, reply_markup=None, inline_message_id=None):
@@ -77,9 +91,7 @@ def answer_pre_checkout_query(pre_checkout_query_id, ok=True, error_message=None
         payload["error_message"] = error_message
     requests.post(url, json=payload)
 
-# ЖАҢА ФУНКЦИЯ: Индикатор қосу
 def send_chat_action(chat_id, action="typing"):
-    """Телеграмда 'typing...', 'find_location' сияқты статустарды шығарады"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendChatAction"
     payload = {"chat_id": chat_id, "action": action}
     requests.post(url, json=payload)
