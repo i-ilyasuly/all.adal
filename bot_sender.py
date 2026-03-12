@@ -11,10 +11,20 @@ def send_message(chat_id, text, reply_markup=None):
         return resp["result"]["message_id"]
     return None
 
-def edit_message(chat_id, message_id, text, reply_markup=None):
+def edit_message(chat_id=None, message_id=None, text=None, reply_markup=None, inline_message_id=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText"
-    payload = {"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": "HTML"}
-    if reply_markup: payload["reply_markup"] = reply_markup
+    payload = {"text": text, "parse_mode": "HTML"}
+    
+    # ЖАҢА: Инлайн батырма ма, әлде кәдімгі чат батырмасы ма, соны ажырату
+    if inline_message_id:
+        payload["inline_message_id"] = inline_message_id
+    else:
+        payload["chat_id"] = chat_id
+        payload["message_id"] = message_id
+        
+    if reply_markup: 
+        payload["reply_markup"] = reply_markup
+        
     requests.post(url, json=payload)
 
 def answer_callback(callback_query_id, text=None, show_alert=False):
