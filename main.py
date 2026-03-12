@@ -1,7 +1,6 @@
 import functions_framework
 import uuid
-# ЖАҢА ИМПОРТ: edit_reply_markup қосылды
-from bot_sender import send_message, edit_message, edit_reply_markup, answer_callback, answer_inline_query, download_photo
+from bot_sender import send_message, edit_message, edit_reply_markup, answer_callback, answer_inline_query, download_photo, send_chat_action
 from db_core import (add_user, save_chat_history, log_to_bigquery, get_item_by_id, 
                      check_access, increment_usage, revoke_premium, clear_cache, 
                      get_user_gender, set_user_gender)
@@ -83,12 +82,11 @@ def telegram_webhook(request):
                 else:
                     answer_callback(cb["id"], text="Мәлімет табылмады 😔", show_alert=True)
 
-            # --- ЖАҢА ЛАЙК ЛОГИКАСЫ ---
             elif data.startswith("fb:good"):
                 answer_callback(cb["id"], text="Пікіріңізге рақмет! ❤️")
                 log_to_bigquery(user_id, "feedback", "👍 Пайдалы", "Кері байланыс")
                 
-                new_kb = []
+                new_kb =[]
                 if not is_inline:
                     existing_kb = cb["message"].get("reply_markup", {}).get("inline_keyboard",[])
                     for row in existing_kb:
@@ -104,13 +102,12 @@ def telegram_webhook(request):
                             
                 edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
 
-            # --- ЖАҢА ДИЗЛАЙК ЛОГИКАСЫ ---
             elif data.startswith("fb:bad"):
                 answer_callback(cb["id"])
                 
                 new_kb =[]
                 if not is_inline:
-                    existing_kb = cb["message"].get("reply_markup", {}).get("inline_keyboard", [])
+                    existing_kb = cb["message"].get("reply_markup", {}).get("inline_keyboard",[])
                     for row in existing_kb:
                         url_row =[btn for btn in row if "url" in btn]
                         if url_row: new_kb.append(url_row)
@@ -122,7 +119,6 @@ def telegram_webhook(request):
                         if item and item.get("map_link"):
                             new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"]}])
                 
-                # "fb:bad:" дегенді кесіп алып, себептердің астына жалғаймыз
                 suffix = data[7:] 
                 
                 new_kb.append([{"text": "📝 Қате ақпарат", "callback_data": f"fb:reason:info:{suffix}"}])
@@ -131,7 +127,6 @@ def telegram_webhook(request):
                 
                 edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
 
-            # --- СЕБЕПТІ ТАҢДАҒАНДА ---
             elif data.startswith("fb:reason:"):
                 parts = data.split(":")
                 reason_code = parts[2]
@@ -140,11 +135,11 @@ def telegram_webhook(request):
                 answer_callback(cb["id"], text="Рақмет! Түзетеміз 🛠", show_alert=True)
                 log_to_bigquery(user_id, "feedback", f"👎 Қате ({reason_text})", "Кері байланыс")
                 
-                new_kb = []
+                new_kb =[]
                 if not is_inline:
                     existing_kb = cb["message"].get("reply_markup", {}).get("inline_keyboard",[])
                     for row in existing_kb:
-                        url_row = [btn for btn in row if "url" in btn]
+                        url_row =[btn for btn in row if "url" in btn]
                         if url_row: new_kb.append(url_row)
                 else:
                     if len(parts) >= 6 and parts[3] == "itm":
@@ -222,8 +217,10 @@ def telegram_webhook(request):
                 if not has_access:
                     send_message(chat_id, reason, reply_markup=get_premium_keyboard())
                     return "OK", 200
+                
+                # ЖАҢА: Суретті талдамас бұрын тек индикатор жанады (хат жоқ!)
+                send_chat_action(chat_id, "typing")
                     
-                send_message(chat_id, "📷 Суретті талдап жатырмын, сәл күте тұрыңыз...")
                 photo_id = msg["photo"][-1]["file_id"]
                 image_bytes = download_photo(photo_id)
                 if image_bytes:
@@ -239,6 +236,9 @@ def telegram_webhook(request):
                 if not has_access:
                     send_message(chat_id, reason, reply_markup=get_premium_keyboard())
                     return "OK", 200
+                
+                # ЖАҢА: Локация іздер алдында локация индикаторын қосамыз
+                send_chat_action(chat_id, "find_location")
                     
                 lat, lon = msg["location"]["latitude"], msg["location"]["longitude"]
                 text, markup = get_nearby_companies(lat, lon, page=1)
@@ -249,6 +249,9 @@ def telegram_webhook(request):
             elif "text" in msg:
                 text = msg["text"]
                 save_chat_history(chat_id, "user", text)
+                
+                # Мәтін түскенде де индикатор жанады
+                send_chat_action(chat_id, "typing")
 
                 if text == "/start":
                     add_user(chat_id, first_name, username)
@@ -309,11 +312,11 @@ def telegram_webhook(request):
                             log_to_bigquery(chat_id, "text_search", text, "Табылды (Көп)")
                             increment_usage(chat_id)
                     else:
-                        wait_msg_id = send_message(chat_id, "⏳ <i>Базадан іздеп жатырмын...</i>")
+                        # ЖАҢА: Стримингке арналған кішкентай маркер (Бұрынғы ұзын мәтін алынып тасталды)
+                        wait_msg_id = send_message(chat_id, "✍️...")
                         
                         if wait_msg_id:
                             ai_reply = chat_with_ai(chat_id, text, is_symbat, chat_id=chat_id, message_id=wait_msg_id)
-                            # ЖАҢА: AI жауаптарына да AI маркері қойылды
                             keys = {"inline_keyboard": [[{"text": "👍 Пайдалы", "callback_data": "fb:good:ai"}, {"text": "👎 Қате", "callback_data": "fb:bad:ai"}]]}
                             edit_message(chat_id, wait_msg_id, ai_reply, reply_markup=keys)
                         else:
