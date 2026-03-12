@@ -28,7 +28,6 @@ def format_item_dict(data, type_name):
     else:
         st = "✅ Рұқсат етілген" if data.get("status", {}).get("name") == "Халяль" else "🚫 Күдікті"
         
-        # Егер базада title жоқ болса, оның орнына slug-ты үлкен әріппен шығарамыз (мысалы e132 -> E132)
         item_title = data.get("title", "")
         if not item_title:
             item_title = str(data.get("slug", "")).upper()
@@ -38,7 +37,7 @@ def format_item_dict(data, type_name):
             "type": "Қоспа",
             "title": item_title,
             "desc": data.get("name", ""),
-            "info": data.get("desc", ""), # ЖАҢА ҚАТАР: Қоспаның толық түсіндірмесі осында сақталады
+            "info": data.get("desc", ""),
             "status": st
         }
 
@@ -47,9 +46,9 @@ def format_detail_message(item):
     
     if item['type'] == 'Мекеме':
         if "Белсенді" in item['status']:
-            msg = f"✅ Тамаша! <b>«{clean_title}»</b> мекемесі/өнімі ҚМДБ базасында тіркелген.\n\n"
+            msg = f"✅ <b>«{clean_title}»</b> — ҚМДБ базасында ресми тіркелген.\n\n"
         else:
-            msg = f"⚠️ <b>ЕСКЕРТУ!</b> <b>«{clean_title}»</b> сертификаты қазір ЖАРАМСЫЗ!\n\n"
+            msg = f"⚠️ <b>Назар аударыңыз:</b> <b>«{clean_title}»</b> сертификаты қазір ЖАРАМСЫЗ немесе мерзімі біткен!\n\n"
             
         if item['desc'] and item['desc'] != "Белгісіз":
             msg += f"🏢 <b>Өндіруші:</b> {item['desc']}\n"
@@ -72,14 +71,13 @@ def format_detail_message(item):
         
     else:
         if "Рұқсат" in item['status']:
-            msg = f"✅ <b>«{clean_title}»</b> қоспасы ҚМДБ тарапынан рұқсат етілген.\n\n"
+            msg = f"✅ <b>«{clean_title}»</b> — рұқсат етілген (халал) қоспа.\n\n"
         else:
-            msg = f"🚫 <b>ЕСКЕРТУ!</b> <b>«{clean_title}»</b> қоспасы күдікті тізімінде!\n\n"
+            msg = f"🚫 <b>Назар аударыңыз:</b> <b>«{clean_title}»</b> қоспасы күдікті (рұқсат етілмеген болуы мүмкін)!\n\n"
             
         msg += f"🏷 <b>Ғылыми атауы:</b> {item['desc']}\n"
         msg += f"📊 <b>Статус:</b> {item['status']}"
         
-        # ЖАҢА БЛОК: Егер базада қосымша ақпарат (desc) болса, соны шығарып береді
         if item.get('info'):
             msg += f"\n\n📝 <b>Ақпарат:</b> {item['info']}"
         
