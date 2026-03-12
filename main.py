@@ -1,6 +1,6 @@
 import functions_framework
 import uuid
-from bot_sender import send_message, edit_message, edit_reply_markup, answer_callback, answer_inline_query, download_photo, send_chat_action
+from bot_sender import send_message, edit_message, edit_reply_markup, answer_callback, answer_inline_query, download_photo, send_chat_action, send_sticker, delete_message
 from db_core import (add_user, save_chat_history, log_to_bigquery, get_item_by_id, 
                      check_access, increment_usage, revoke_premium, clear_cache, 
                      get_user_gender, set_user_gender)
@@ -12,6 +12,11 @@ from config import CRON_SECRET
 from payments import get_premium_keyboard, handle_buy_premium_callback, process_pre_checkout, process_successful_payment
 
 SYMBAT_ID = 1042456426
+
+# --- ЭФФЕКТІЛЕР ЖӘНЕ СТИКЕР ID ТІЗІМІ ---
+EFFECT_HALAL = "5046509860389126442"    # 🎉 Шашу
+EFFECT_EXPIRED = "5104841245755180586"  # 🔥 От
+LOADING_STICKER = "CAACAgIAAxkBAAID_mmzSRfbvjOYJ5KV8BFXy1aZQi8zAALsjAACAX2ISdhu-CgadkQqOgQ"
 
 @functions_framework.http
 def telegram_webhook(request):
@@ -53,16 +58,18 @@ def telegram_webhook(request):
                 gender_val = data.split(":")[1]
                 gender_kz = "Ер" if gender_val == "male" else "Әйел"
                 
-                set_user_gender(user_id, gender_kz)
-                log_to_bigquery(user_id, "set_gender", gender_kz, "Профиль жаңартылды")
-                
                 answer_callback(cb["id"])
                 
                 success_text = f"Рақмет, сақталды! 👍\n\nЕнді бастайық 🚀\nМаған кез келген өнімнің атын жазыңыз, суретін жіберіңіз немесе жақын маңдағы халал дәмханаларды іздеп көріңіз!"
                 keyboard = {"keyboard": [[{"text": "📍 Тұрған орнымды жіберу", "request_location": True}]], "resize_keyboard": True}
                 
+                # 1. Алдымен пайдаланушыға жауап береміз
                 edit_message(chat_id, message_id, success_text)
                 send_message(chat_id, "Төмендегі батырма арқылы локация жібере аласыз 👇", reply_markup=keyboard)
+                
+                # 2. Сосын барып фондық режимде сақтаймыз
+                set_user_gender(user_id, gender_kz)
+                log_to_bigquery(user_id, "set_gender", gender_kz, "Профиль жаңартылды")
                     
             elif data.startswith("loc:"):
                 answer_callback(cb["id"])
@@ -78,13 +85,19 @@ def telegram_webhook(request):
                 item = get_item_by_id(t_code, item_id)
                 if item:
                     text, markup = format_detail_message(item)
-                    edit_message(chat_id, message_id, text, markup)
+                    has_access, tier = check_access(user_id, user_id == SYMBAT_ID)
+                    effect = None
+                    if tier in ["premium", "VIP"]:
+                        status_text = item.get("status", "")
+                        if "Белсенді" in status_text or "Рұқсат" in status_text: effect = EFFECT_HALAL
+                        elif "Мерзімі" in status_text or "⚠️" in status_text or "🚫" in status_text or "Қайтарып" in status_text: effect = EFFECT_EXPIRED
+
+                    send_message(chat_id, text, reply_markup=markup, message_effect_id=effect)
                 else:
                     answer_callback(cb["id"], text="Мәлімет табылмады 😔", show_alert=True)
 
             elif data.startswith("fb:good"):
                 answer_callback(cb["id"], text="Пікіріңізге рақмет! ❤️")
-                log_to_bigquery(user_id, "feedback", "👍 Пайдалы", "Кері байланыс")
                 
                 new_kb =[]
                 if not is_inline:
@@ -101,6 +114,7 @@ def telegram_webhook(request):
                             new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"]}])
                             
                 edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
+                log_to_bigquery(user_id, "feedback", "👍 Пайдалы", "Кері байланыс")
 
             elif data.startswith("fb:bad"):
                 answer_callback(cb["id"])
@@ -133,7 +147,6 @@ def telegram_webhook(request):
                 reason_text = "Қате ақпарат" if reason_code == "info" else "ЖИ қатесі" if reason_code == "ai" else "Басқа"
                 
                 answer_callback(cb["id"], text="Рақмет! Түзетеміз 🛠", show_alert=True)
-                log_to_bigquery(user_id, "feedback", f"👎 Қате ({reason_text})", "Кері байланыс")
                 
                 new_kb =[]
                 if not is_inline:
@@ -149,6 +162,7 @@ def telegram_webhook(request):
                             new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"]}])
                             
                 edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
+                log_to_bigquery(user_id, "feedback", f"👎 Қате ({reason_text})", "Кері байланыс")
 
             return "OK", 200
 
@@ -163,7 +177,7 @@ def telegram_webhook(request):
             prompt_button = {"text": "🔍 Өнім немесе мекеме атауын жазыңыз...", "start_parameter": "search_help"}
             
             if len(query_text) >= 3:
-                has_access, reason = check_access(user_id, user_id == SYMBAT_ID)
+                has_access, tier = check_access(user_id, user_id == SYMBAT_ID)
                 if not has_access:
                     answer_inline_query(inline_query_id,[], button={"text": "⚠️ Лимит бітті! Premium алу үшін басыңыз", "start_parameter": "buy_premium"})
                     return "OK", 200
@@ -213,53 +227,73 @@ def telegram_webhook(request):
                 return "OK", 200
             
             if "photo" in msg:
-                has_access, reason = check_access(chat_id, is_symbat)
+                has_access, tier = check_access(chat_id, is_symbat)
                 if not has_access:
-                    send_message(chat_id, reason, reply_markup=get_premium_keyboard())
+                    send_message(chat_id, tier, reply_markup=get_premium_keyboard())
                     return "OK", 200
                 
-                # ЖАҢА: Суретті талдамас бұрын тек индикатор жанады (хат жоқ!)
+                sticker_msg_id = send_sticker(chat_id, LOADING_STICKER)
                 send_chat_action(chat_id, "typing")
                     
                 photo_id = msg["photo"][-1]["file_id"]
                 image_bytes = download_photo(photo_id)
                 if image_bytes:
                     result_msg, markup = handle_photo(image_bytes, chat_id, username)
-                    send_message(chat_id, result_msg, reply_markup=markup)
+                    
+                    effect = None
+                    if tier in["premium", "VIP"]:
+                        if "✅" in result_msg: effect = EFFECT_HALAL
+                        elif "⚠️" in result_msg or "🚫" in result_msg: effect = EFFECT_EXPIRED
+                    
+                    # 1. ЖАУАПТЫ БІРДЕН ЖІБЕРУ (Пайдаланушы оқи бастайды)
+                    send_message(chat_id, result_msg, reply_markup=markup, message_effect_id=effect)
+                    
+                    # 2. СТИКЕРДІ ЖАУАПТАН КЕЙІН ӨШІРУ (Кешігу байқалмайды)
+                    if sticker_msg_id:
+                        delete_message(chat_id, sticker_msg_id)
+                        
+                    # 3. ҚОСЫМША ПРОЦЕСТЕРДІ СОҢЫНДА ЖАСАУ
                     save_chat_history(chat_id, "user", "Мен саған бір сурет жібердім")
                     save_chat_history(chat_id, "model", result_msg)
                     log_to_bigquery(chat_id, "photo_search", "Сурет", "Тексерілді")
                     increment_usage(chat_id)
 
             elif "location" in msg:
-                has_access, reason = check_access(chat_id, is_symbat)
+                has_access, tier = check_access(chat_id, is_symbat)
                 if not has_access:
-                    send_message(chat_id, reason, reply_markup=get_premium_keyboard())
+                    send_message(chat_id, tier, reply_markup=get_premium_keyboard())
                     return "OK", 200
                 
-                # ЖАҢА: Локация іздер алдында локация индикаторын қосамыз
+                sticker_msg_id = send_sticker(chat_id, LOADING_STICKER)
                 send_chat_action(chat_id, "find_location")
                     
                 lat, lon = msg["location"]["latitude"], msg["location"]["longitude"]
                 text, markup = get_nearby_companies(lat, lon, page=1)
+                
+                # 1. ЖАУАПТЫ ЖІБЕРУ
                 send_message(chat_id, text, reply_markup=markup)
+                
+                # 2. СТИКЕРДІ ӨШІРУ
+                if sticker_msg_id:
+                    delete_message(chat_id, sticker_msg_id)
+                    
+                # 3. ЛОГ ЖАЗУ
                 log_to_bigquery(chat_id, "location_search", f"{lat}, {lon}", "Тізім берілді")
                 increment_usage(chat_id)
 
             elif "text" in msg:
                 text = msg["text"]
-                save_chat_history(chat_id, "user", text)
-                
-                # Мәтін түскенде де индикатор жанады
-                send_chat_action(chat_id, "typing")
 
                 if text == "/start":
-                    add_user(chat_id, first_name, username)
+                    send_chat_action(chat_id, "typing")
                     
                     if is_symbat:
                         welcome_text = f"Сәлем, Ботам! ❤️\n\nБұл сенің сүйікті жігітің жасаған ҚМДБ Халал боты ғой. Маған кез келген өнімнің атын жаз немесе суретін жібер, мен сен үшін бәрін тауып беремін! 😘"
                         keyboard = {"keyboard": [[{"text": "📍 Тұрған орнымды жіберу", "request_location": True}]], "resize_keyboard": True}
                         send_message(chat_id, welcome_text, reply_markup=keyboard)
+                        
+                        add_user(chat_id, first_name, username)
+                        save_chat_history(chat_id, "user", text)
                         save_chat_history(chat_id, "model", welcome_text)
                         log_to_bigquery(chat_id, "start", "/start", "Сымбат кірді")
                     else:
@@ -271,11 +305,16 @@ def telegram_webhook(request):
                                  {"text": "🙎‍♀️ Нәзік жанды", "callback_data": "gender:female"}]
                             ]}
                             send_message(chat_id, welcome_text, reply_markup=gender_markup)
+                            
+                            add_user(chat_id, first_name, username)
+                            save_chat_history(chat_id, "user", text)
                             log_to_bigquery(chat_id, "start", "/start", "Жаңа қолданушы (Жыныс сұралды)")
                         else:
                             welcome_text = f"Қайта оралуыңызбен, {first_name}! 👋\n\nМен жұмысқа дайынмын. Тексеретін өнім бар ма немесе тамақтанатын орын іздейміз бе?"
                             keyboard = {"keyboard": [[{"text": "📍 Тұрған орнымды жіберу", "request_location": True}]], "resize_keyboard": True}
                             send_message(chat_id, welcome_text, reply_markup=keyboard)
+                            
+                            save_chat_history(chat_id, "user", text)
                             save_chat_history(chat_id, "model", welcome_text)
                             log_to_bigquery(chat_id, "start", "/start", "Ескі қолданушы")
                             
@@ -283,14 +322,25 @@ def telegram_webhook(request):
                     found_items = search_data(text)
                     
                     if found_items:
-                        has_access, reason = check_access(chat_id, is_symbat)
+                        has_access, tier = check_access(chat_id, is_symbat)
                         if not has_access:
-                            send_message(chat_id, reason, reply_markup=get_premium_keyboard())
+                            send_message(chat_id, tier, reply_markup=get_premium_keyboard())
                             return "OK", 200
                             
+                        send_chat_action(chat_id, "typing")
+                        
                         if len(found_items) == 1:
                             reply_text, markup = format_detail_message(found_items[0])
-                            send_message(chat_id, reply_text, reply_markup=markup)
+                            
+                            effect = None
+                            if tier in ["premium", "VIP"]:
+                                status_text = found_items[0].get("status", "")
+                                if "Белсенді" in status_text or "Рұқсат" in status_text: effect = EFFECT_HALAL
+                                elif "Мерзімі" in status_text or "⚠️" in status_text or "Қайтарып" in status_text or "🚫" in status_text: effect = EFFECT_EXPIRED
+                                
+                            send_message(chat_id, reply_text, reply_markup=markup, message_effect_id=effect)
+                            
+                            save_chat_history(chat_id, "user", text)
                             save_chat_history(chat_id, "model", reply_text)
                             log_to_bigquery(chat_id, "text_search", text, "Табылды (1)")
                             increment_usage(chat_id)
@@ -308,22 +358,39 @@ def telegram_webhook(request):
                                 keyboard.append([{"text": f"{idx+1}. «{item['title']}»", "callback_data": f"itm:{t_code}:{item['id']}"}])
                                 
                             send_message(chat_id, reply_text, reply_markup={"inline_keyboard": keyboard})
+                            
+                            save_chat_history(chat_id, "user", text)
                             save_chat_history(chat_id, "model", reply_text)
                             log_to_bigquery(chat_id, "text_search", text, "Табылды (Көп)")
                             increment_usage(chat_id)
                     else:
-                        # ЖАҢА: Стримингке арналған кішкентай маркер (Бұрынғы ұзын мәтін алынып тасталды)
+                        _, tier = check_access(chat_id, is_symbat)
+                        
+                        sticker_msg_id = send_sticker(chat_id, LOADING_STICKER)
+                        send_chat_action(chat_id, "typing")
+                        
                         wait_msg_id = send_message(chat_id, "✍️...")
                         
                         if wait_msg_id:
                             ai_reply = chat_with_ai(chat_id, text, is_symbat, chat_id=chat_id, message_id=wait_msg_id)
                             keys = {"inline_keyboard": [[{"text": "👍 Пайдалы", "callback_data": "fb:good:ai"}, {"text": "👎 Қате", "callback_data": "fb:bad:ai"}]]}
+                            
+                            # 1. ЖАУАПТЫ ЖАҢАРТУ (Тез!)
                             edit_message(chat_id, wait_msg_id, ai_reply, reply_markup=keys)
+                            # 2. СТИКЕРДІ ӨШІРУ
+                            if sticker_msg_id:
+                                delete_message(chat_id, sticker_msg_id)
                         else:
                             ai_reply = chat_with_ai(chat_id, text, is_symbat)
                             keys = {"inline_keyboard": [[{"text": "👍 Пайдалы", "callback_data": "fb:good:ai"}, {"text": "👎 Қате", "callback_data": "fb:bad:ai"}]]}
-                            send_message(chat_id, ai_reply, reply_markup=keys)
                             
+                            # 1. ЖАУАПТЫ ЖІБЕРУ
+                            send_message(chat_id, ai_reply, reply_markup=keys)
+                            # 2. СТИКЕРДІ ӨШІРУ
+                            if sticker_msg_id:
+                                delete_message(chat_id, sticker_msg_id)
+                            
+                        save_chat_history(chat_id, "user", text)    
                         save_chat_history(chat_id, "model", ai_reply)
                         log_to_bigquery(chat_id, "ai_chat", text, "Табылмады/AI жауап берді")
 
