@@ -1,0 +1,8 @@
+functions-framework==3.10.1
+requests==2.31.0
+google-cloud-firestore==2.11.1
+thefuzz==0.22.1
+python-Levenshtein==0.25.0
+google-generativeai
+google-cloud-storage
+google-cloud-bigquery
