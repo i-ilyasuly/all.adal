@@ -63,10 +63,16 @@ def format_detail_message(item):
             
         msg += f"📍 <b>Мекенжайы:</b> {item.get('address', 'Көрсетілмеген')}"
         
-        keys =[]
+        keys = []
         if item.get('map_link'):
             keys.append([{"text": "🗺️ Картадан көру", "url": item['map_link']}])
-        keys.append([{"text": "👍 Пайдалы", "callback_data": "fb:good"}, {"text": "👎 Қате", "callback_data": "fb:bad"}])
+            
+        # ЖАҢА: Батырмаларға ID жалғанады!
+        t_code = "c"
+        keys.append([
+            {"text": "👍 Пайдалы", "callback_data": f"fb:good:itm:{t_code}:{item['id']}"}, 
+            {"text": "👎 Қате", "callback_data": f"fb:bad:itm:{t_code}:{item['id']}"}
+        ])
         return msg, {"inline_keyboard": keys}
         
     else:
@@ -81,5 +87,10 @@ def format_detail_message(item):
         if item.get('info'):
             msg += f"\n\n📝 <b>Ақпарат:</b> {item['info']}"
         
-        keys = [[{"text": "👍 Пайдалы", "callback_data": "fb:good"}, {"text": "👎 Қате", "callback_data": "fb:bad"}]]
+        keys =[]
+        t_code = "i"
+        keys.append([
+            {"text": "👍 Пайдалы", "callback_data": f"fb:good:itm:{t_code}:{item['id']}"}, 
+            {"text": "👎 Қате", "callback_data": f"fb:bad:itm:{t_code}:{item['id']}"}
+        ])
         return msg, {"inline_keyboard": keys}
