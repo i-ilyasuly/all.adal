@@ -30,14 +30,12 @@ def load_cache():
         CACHE["ingredients"] =[i.to_dict() for i in ings]
         CACHE["loaded"] = True
 
-# ================= ЖАҢА ФУНКЦИЯ: ЖАДЫНЫ ТАЗАЛАУ =================
 def clear_cache():
     """Түнгі жаңартудан кейін ескі мәліметтерді өшіреді"""
     global CACHE
     CACHE["companies"] = []
     CACHE["ingredients"] = []
     CACHE["loaded"] = False
-# ================================================================
 
 def get_chat_history(user_id):
     doc = db.collection("chat_history").document(str(user_id)).get()
@@ -106,7 +104,7 @@ def increment_usage(user_id):
             new_usage = 1
         doc_ref.set({"daily_searches": new_usage, "last_search_date": today_str}, merge=True)
     else:
-        # ЖАҢА ҚОСЫЛҒАН БЛОК: Базада жоқ Инлайн адамдарды автоматты тіркеу
+        # Инлайн қолданушыларды тіркеу
         doc_ref.set({
             "first_name": "Inline User",
             "username": "hidden",
@@ -123,11 +121,23 @@ def revoke_premium(user_id):
     db.collection("users").document(str(user_id)).set({"premium_until": None}, merge=True)
 
 def record_payment(user_id, username, amount, payload, charge_id):
-    db.collection("payments_history").add({
+    # Қайталанған төлемдерді болдырмау үшін document(charge_id) қолданамыз
+    db.collection("payments_history").document(str(charge_id)).set({
         "user_id": str(user_id),
         "username": username,
         "amount_stars": amount,
         "payload": payload,
         "telegram_charge_id": charge_id,
         "timestamp": firestore.SERVER_TIMESTAMP
-    })
+    }, merge=True)
+
+def get_user_gender(user_id):
+    """Адамның жынысын базадан оқу"""
+    doc = db.collection("users").document(str(user_id)).get()
+    if doc.exists:
+        return doc.to_dict().get("gender")
+    return None
+
+def set_user_gender(user_id, gender):
+    """Жынысты Firestore-ға сақтау"""
+    db.collection("users").document(str(user_id)).set({"gender": gender}, merge=True)
