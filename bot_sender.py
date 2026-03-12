@@ -22,7 +22,6 @@ def edit_message(chat_id=None, message_id=None, text=None, reply_markup=None, in
     if reply_markup: payload["reply_markup"] = reply_markup
     requests.post(url, json=payload)
 
-# ЖАҢА ФУНКЦИЯ: Тек батырмаларды ғана өзгертеді!
 def edit_reply_markup(chat_id=None, message_id=None, reply_markup=None, inline_message_id=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageReplyMarkup"
     payload = {}
@@ -76,4 +75,11 @@ def answer_pre_checkout_query(pre_checkout_query_id, ok=True, error_message=None
     payload = {"pre_checkout_query_id": pre_checkout_query_id, "ok": ok}
     if not ok and error_message:
         payload["error_message"] = error_message
+    requests.post(url, json=payload)
+
+# ЖАҢА ФУНКЦИЯ: Индикатор қосу
+def send_chat_action(chat_id, action="typing"):
+    """Телеграмда 'typing...', 'find_location' сияқты статустарды шығарады"""
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendChatAction"
+    payload = {"chat_id": chat_id, "action": action}
     requests.post(url, json=payload)
