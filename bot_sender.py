@@ -121,3 +121,16 @@ def set_message_reaction(chat_id, message_id, emoji, is_big=True):
         "is_big": is_big
     }
     requests.post(url, json=payload)
+
+def send_gift_invoice(chat_id):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendInvoice"
+    payload = {
+        "chat_id": chat_id,
+        "title": "🎁 Premium Сыйлық (30 күн)",
+        "description": "Досыңызға немесе жақыныңызға шексіз іздеу мүмкіндігін сыйлаңыз! Төлем жасалғаннан кейін сізге арнайы сыйлық сілтемесі беріледі.",
+        "payload": "gift_premium_30_days", # PAYLOAD өте маңызды!
+        "provider_token": "", 
+        "currency": "XTR",    
+        "prices":[{"label": "Premium Сыйлық", "amount": 100}]
+    }
+    requests.post(url, json=payload)
