@@ -9,7 +9,7 @@ from payments import process_successful_payment, get_premium_keyboard
 
 SYMBAT_ID = 1042456426
 EFFECT_HALAL = "5046509860389126442"
-EFFECT_EXPIRED = "5104841245755180586"
+EFFECT_EXPIRED = "5104858069142078462"
 
 def handle_message(msg):
     chat_id = msg["chat"]["id"]
@@ -181,7 +181,7 @@ def handle_message(msg):
                     
                     # ЖАҢА: Көп нұсқа табылғанда боттың хатына "Ойлану" (сұрау) белгісі
                     if tier in ["premium", "VIP"] and bot_msg_id:
-                        set_message_reaction(chat_id, bot_msg_id, "🤔")
+                        set_message_reaction(chat_id, bot_msg_id, "👨‍💻")
                     
                     save_chat_history(chat_id, "user", text)
                     save_chat_history(chat_id, "model", reply_text)
