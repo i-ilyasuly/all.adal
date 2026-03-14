@@ -1,4 +1,4 @@
-from bot_sender import send_message, edit_message, send_chat_action, send_sticker, delete_message, download_photo
+from bot_sender import send_message, edit_message, send_chat_action, delete_message, download_photo
 from db_core import (add_user, save_chat_history, log_to_bigquery, check_access, 
                      increment_usage, revoke_premium, get_user_gender)
 from search_logic import search_data, get_nearby_companies
@@ -12,6 +12,9 @@ EFFECT_EXPIRED = "5104841245755180586"
 
 def handle_message(msg):
     chat_id = msg["chat"]["id"]
+    # ЖАҢА: Пайдаланушының хабарлама ID-і
+    user_msg_id = msg["message_id"] 
+    
     first_name = msg["chat"].get("first_name", "Досым")
     username = msg["chat"].get("username", "жоқ")
     is_symbat = (chat_id == SYMBAT_ID)
@@ -22,17 +25,18 @@ def handle_message(msg):
         
     if "refunded_payment" in msg:
         revoke_premium(chat_id)
-        send_message(chat_id, "⚠️ Сіз төлемді қайтарып алдыңыз. Premium статусыңыз өшірілді.")
+        send_message(chat_id, "⚠️ Сіз төлемді қайтарып алдыңыз. Premium статусыңыз өшірілді.", reply_to_message_id=user_msg_id)
         return
     
     if "photo" in msg:
         has_access, tier = check_access(chat_id, is_symbat)
         if not has_access:
-            send_message(chat_id, tier, reply_markup=get_premium_keyboard())
+            send_message(chat_id, tier, reply_markup=get_premium_keyboard(), reply_to_message_id=user_msg_id)
             return
         
-        wait_msg_id = send_message(chat_id, "🔬")  # Микроскоп анимациясы шығады
         send_chat_action(chat_id, "typing")
+        # 🔬 Микроскопты реплай ретінде жібереміз
+        wait_msg_id = send_message(chat_id, "🔬", reply_to_message_id=user_msg_id)
             
         photo_id = msg["photo"][-1]["file_id"]
         image_bytes = download_photo(photo_id)
@@ -44,7 +48,8 @@ def handle_message(msg):
                 if "✅" in result_msg: effect = EFFECT_HALAL
                 elif "⚠️" in result_msg or "🚫" in result_msg: effect = EFFECT_EXPIRED
             
-            send_message(chat_id, result_msg, reply_markup=markup, message_effect_id=effect)
+            # Дайын жауапты да реплай ретінде жібереміз
+            send_message(chat_id, result_msg, reply_markup=markup, message_effect_id=effect, reply_to_message_id=user_msg_id)
             
             if wait_msg_id:
                 delete_message(chat_id, wait_msg_id)
@@ -57,16 +62,15 @@ def handle_message(msg):
     elif "location" in msg:
         has_access, tier = check_access(chat_id, is_symbat)
         if not has_access:
-            send_message(chat_id, tier, reply_markup=get_premium_keyboard())
+            send_message(chat_id, tier, reply_markup=get_premium_keyboard(), reply_to_message_id=user_msg_id)
             return
-        
         
         send_chat_action(chat_id, "find_location")
             
         lat, lon = msg["location"]["latitude"], msg["location"]["longitude"]
         text, markup = get_nearby_companies(lat, lon, page=1)
         
-        send_message(chat_id, text, reply_markup=markup)
+        send_message(chat_id, text, reply_markup=markup, reply_to_message_id=user_msg_id)
             
         log_to_bigquery(chat_id, "location_search", f"{lat}, {lon}", "Тізім берілді")
         increment_usage(chat_id)
@@ -80,7 +84,7 @@ def handle_message(msg):
             if is_symbat:
                 welcome_text = f"Сәлем, Ботам! ❤️\n\nБұл сенің сүйікті жігітің жасаған ҚМДБ Халал боты ғой. Маған кез келген өнімнің атын жаз немесе суретін жібер, мен сен үшін бәрін тауып беремін! 😘"
                 keyboard = {"keyboard": [[{"text": "📍 Тұрған орнымды жіберу", "request_location": True}]], "resize_keyboard": True}
-                send_message(chat_id, welcome_text, reply_markup=keyboard)
+                send_message(chat_id, welcome_text, reply_markup=keyboard, reply_to_message_id=user_msg_id)
                 
                 add_user(chat_id, first_name, username)
                 save_chat_history(chat_id, "user", text)
@@ -93,7 +97,7 @@ def handle_message(msg):
                     welcome_text = f"Сәлем, {first_name}! 👋\n\nМен — кез келген өнімнің немесе дәмхананың халал екенін тез әрі нақты тексеріп беретін көмекшіңізбін.\n\nЖақынырақ танысу үшін, жынысыңызды таңдаңызшы:"
                     gender_markup = {"inline_keyboard": [[{"text": "🙎‍♂️ Ер азамат", "callback_data": "gender:male"},
                          {"text": "🙎‍♀️ Нәзік жанды", "callback_data": "gender:female"}]]}
-                    send_message(chat_id, welcome_text, reply_markup=gender_markup)
+                    send_message(chat_id, welcome_text, reply_markup=gender_markup, reply_to_message_id=user_msg_id)
                     
                     add_user(chat_id, first_name, username)
                     save_chat_history(chat_id, "user", text)
@@ -101,7 +105,7 @@ def handle_message(msg):
                 else:
                     welcome_text = f"Қайта оралуыңызбен, {first_name}! 👋\n\nМен жұмысқа дайынмын. Тексеретін өнім бар ма немесе тамақтанатын орын іздейміз бе?"
                     keyboard = {"keyboard": [[{"text": "📍 Тұрған орнымды жіберу", "request_location": True}]], "resize_keyboard": True}
-                    send_message(chat_id, welcome_text, reply_markup=keyboard)
+                    send_message(chat_id, welcome_text, reply_markup=keyboard, reply_to_message_id=user_msg_id)
                     
                     save_chat_history(chat_id, "user", text)
                     save_chat_history(chat_id, "model", welcome_text)
@@ -113,7 +117,7 @@ def handle_message(msg):
             if found_items:
                 has_access, tier = check_access(chat_id, is_symbat)
                 if not has_access:
-                    send_message(chat_id, tier, reply_markup=get_premium_keyboard())
+                    send_message(chat_id, tier, reply_markup=get_premium_keyboard(), reply_to_message_id=user_msg_id)
                     return
                     
                 send_chat_action(chat_id, "typing")
@@ -127,7 +131,7 @@ def handle_message(msg):
                         if "Белсенді" in status_text or "Рұқсат" in status_text: effect = EFFECT_HALAL
                         elif "Мерзімі" in status_text or "⚠️" in status_text or "Қайтарып" in status_text or "🚫" in status_text: effect = EFFECT_EXPIRED
                         
-                    send_message(chat_id, reply_text, reply_markup=markup, message_effect_id=effect)
+                    send_message(chat_id, reply_text, reply_markup=markup, message_effect_id=effect, reply_to_message_id=user_msg_id)
                     
                     save_chat_history(chat_id, "user", text)
                     save_chat_history(chat_id, "model", reply_text)
@@ -146,7 +150,7 @@ def handle_message(msg):
                         t_code = "c" if item['type'] == "Мекеме" else "i"
                         keyboard.append([{"text": f"{idx+1}. «{item['title']}»", "callback_data": f"itm:{t_code}:{item['id']}"}])
                         
-                    send_message(chat_id, reply_text, reply_markup={"inline_keyboard": keyboard})
+                    send_message(chat_id, reply_text, reply_markup={"inline_keyboard": keyboard}, reply_to_message_id=user_msg_id)
                     
                     save_chat_history(chat_id, "user", text)
                     save_chat_history(chat_id, "model", reply_text)
@@ -156,22 +160,20 @@ def handle_message(msg):
                 _, tier = check_access(chat_id, is_symbat)
                 
                 send_chat_action(chat_id, "typing")
-                wait_msg_id = send_message(chat_id, "✨")  # Жұлдыздар анимациясы шығады
-                
-                wait_msg_id = send_message(chat_id, "✍️...")
+                # ✨ Жұлдызды реплай ретінде жібереміз
+                wait_msg_id = send_message(chat_id, "✨", reply_to_message_id=user_msg_id)
                 
                 if wait_msg_id:
-                    # ЖИ сол жұлдыздарды өңдеп, үстіне мәтінін жаза бастайды!
+                    # Хат өзгертілгенде реплай статусы сақталып қалады!
                     ai_reply = chat_with_ai(chat_id, text, is_symbat, chat_id=chat_id, message_id=wait_msg_id)
                     keys = {"inline_keyboard": [[{"text": "👍 Пайдалы", "callback_data": "fb:good:ai"}, {"text": "👎 Қате", "callback_data": "fb:bad:ai"}]]}
                     
                     edit_message(chat_id, wait_msg_id, ai_reply, reply_markup=keys)
-                    
                 else:
                     ai_reply = chat_with_ai(chat_id, text, is_symbat)
                     keys = {"inline_keyboard": [[{"text": "👍 Пайдалы", "callback_data": "fb:good:ai"}, {"text": "👎 Қате", "callback_data": "fb:bad:ai"}]]}
                     
-                    send_message(chat_id, ai_reply, reply_markup=keys)
+                    send_message(chat_id, ai_reply, reply_markup=keys, reply_to_message_id=user_msg_id)
                     
                 save_chat_history(chat_id, "user", text)    
                 save_chat_history(chat_id, "model", ai_reply)
