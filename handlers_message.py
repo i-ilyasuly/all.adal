@@ -9,7 +9,6 @@ from payments import process_successful_payment, get_premium_keyboard
 SYMBAT_ID = 1042456426
 EFFECT_HALAL = "5046509860389126442"
 EFFECT_EXPIRED = "5104841245755180586"
-LOADING_STICKER = "CAACAgIAAxkBAAID_mmzSRfbvjOYJ5KV8BFXy1aZQi8zAALsjAACAX2ISdhu-CgadkQqOgQ"
 
 def handle_message(msg):
     chat_id = msg["chat"]["id"]
@@ -32,7 +31,7 @@ def handle_message(msg):
             send_message(chat_id, tier, reply_markup=get_premium_keyboard())
             return
         
-        sticker_msg_id = send_sticker(chat_id, LOADING_STICKER)
+        wait_msg_id = send_message(chat_id, "🔬")  # Микроскоп анимациясы шығады
         send_chat_action(chat_id, "typing")
             
         photo_id = msg["photo"][-1]["file_id"]
@@ -47,8 +46,8 @@ def handle_message(msg):
             
             send_message(chat_id, result_msg, reply_markup=markup, message_effect_id=effect)
             
-            if sticker_msg_id:
-                delete_message(chat_id, sticker_msg_id)
+            if wait_msg_id:
+                delete_message(chat_id, wait_msg_id)
                 
             save_chat_history(chat_id, "user", "Мен саған бір сурет жібердім")
             save_chat_history(chat_id, "model", result_msg)
@@ -61,16 +60,13 @@ def handle_message(msg):
             send_message(chat_id, tier, reply_markup=get_premium_keyboard())
             return
         
-        sticker_msg_id = send_sticker(chat_id, LOADING_STICKER)
+        
         send_chat_action(chat_id, "find_location")
             
         lat, lon = msg["location"]["latitude"], msg["location"]["longitude"]
         text, markup = get_nearby_companies(lat, lon, page=1)
         
         send_message(chat_id, text, reply_markup=markup)
-        
-        if sticker_msg_id:
-            delete_message(chat_id, sticker_msg_id)
             
         log_to_bigquery(chat_id, "location_search", f"{lat}, {lon}", "Тізім берілді")
         increment_usage(chat_id)
@@ -159,25 +155,23 @@ def handle_message(msg):
             else:
                 _, tier = check_access(chat_id, is_symbat)
                 
-                sticker_msg_id = send_sticker(chat_id, LOADING_STICKER)
                 send_chat_action(chat_id, "typing")
+                wait_msg_id = send_message(chat_id, "✨")  # Жұлдыздар анимациясы шығады
                 
                 wait_msg_id = send_message(chat_id, "✍️...")
                 
                 if wait_msg_id:
+                    # ЖИ сол жұлдыздарды өңдеп, үстіне мәтінін жаза бастайды!
                     ai_reply = chat_with_ai(chat_id, text, is_symbat, chat_id=chat_id, message_id=wait_msg_id)
                     keys = {"inline_keyboard": [[{"text": "👍 Пайдалы", "callback_data": "fb:good:ai"}, {"text": "👎 Қате", "callback_data": "fb:bad:ai"}]]}
                     
                     edit_message(chat_id, wait_msg_id, ai_reply, reply_markup=keys)
-                    if sticker_msg_id:
-                        delete_message(chat_id, sticker_msg_id)
+                    
                 else:
                     ai_reply = chat_with_ai(chat_id, text, is_symbat)
                     keys = {"inline_keyboard": [[{"text": "👍 Пайдалы", "callback_data": "fb:good:ai"}, {"text": "👎 Қате", "callback_data": "fb:bad:ai"}]]}
                     
                     send_message(chat_id, ai_reply, reply_markup=keys)
-                    if sticker_msg_id:
-                        delete_message(chat_id, sticker_msg_id)
                     
                 save_chat_history(chat_id, "user", text)    
                 save_chat_history(chat_id, "model", ai_reply)
