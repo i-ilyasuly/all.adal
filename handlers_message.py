@@ -204,7 +204,7 @@ def handle_message(msg):
                 bot_msg_id = send_message(chat_id, ai_reply, reply_markup=keys, reply_to_message_id=user_msg_id)
                 
                 if tier in ["premium", "VIP"] and bot_msg_id:
-                    set_message_reaction(chat_id, bot_msg_id, "🤔")
+                    set_message_reaction(chat_id, bot_msg_id, "👨‍💻")
                     
                 save_chat_history(chat_id, "user", text)    
                 save_chat_history(chat_id, "model", ai_reply)
