@@ -106,3 +106,18 @@ def delete_message(chat_id, message_id):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
     payload = {"chat_id": chat_id, "message_id": message_id}
     requests.post(url, json=payload)
+
+# ЖАҢА ФУНКЦИЯ: Хатқа реакция қою
+def set_message_reaction(chat_id, message_id, emoji, is_big=True):
+    """
+    Пайдаланушының хатына смайлик-реакция қояды.
+    is_big=True болса, смайлик экранда үлкен болып анимацияланады (Premium әсері).
+    """
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/setMessageReaction"
+    payload = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "reaction": [{"type": "emoji", "emoji": emoji}],
+        "is_big": is_big
+    }
+    requests.post(url, json=payload)
