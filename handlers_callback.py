@@ -33,10 +33,15 @@ def handle_callback(cb):
         answer_callback(cb["id"])
         
         success_text = f"Рақмет, сақталды! 👍\n\nЕнді бастайық 🚀\nМаған кез келген өнімнің атын жазыңыз, суретін жіберіңіз немесе жақын маңдағы халал дәмханаларды іздеп көріңіз!"
-        keyboard = {"keyboard": [[{"text": "📍 Тұрған орнымды жіберу", "request_location": True}]], "resize_keyboard": True}
+        
+        main_keyboard = {
+            "keyboard": [[{"text": "📍 Тұрған орнымды жіберу", "request_location": True}],[{"text": "⭐️ Premium алу"}, {"text": "🎁 Premium сыйлау"}]
+            ],
+            "resize_keyboard": True
+        }
         
         edit_message(chat_id, message_id, success_text)
-        send_message(chat_id, "Төмендегі батырма арқылы локация жібере аласыз 👇", reply_markup=keyboard)
+        send_message(chat_id, "Мәзірдегі батырмаларды қолдана аласыз 👇", reply_markup=main_keyboard)
         
         set_user_gender(user_id, gender_kz)
         log_to_bigquery(user_id, "set_gender", gender_kz, "Профиль жаңартылды")
@@ -93,7 +98,7 @@ def handle_callback(cb):
                 t_code, item_id = parts[3], parts[4]
                 item = get_item_by_id(t_code, item_id)
                 if item and item.get("map_link"):
-                    new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"]}])
+                            new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"], "style": "primary"}])
                     
         edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
         log_to_bigquery(user_id, "feedback", "👍 Пайдалы", "Кері байланыс")
@@ -117,9 +122,9 @@ def handle_callback(cb):
         
         suffix = data[7:] 
         
-        new_kb.append([{"text": "📝 Қате ақпарат", "callback_data": f"fb:reason:info:{suffix}"}])
-        new_kb.append([{"text": "🤖 ЖИ қатесі", "callback_data": f"fb:reason:ai:{suffix}"}])
-        new_kb.append([{"text": "❌ Басқа", "callback_data": f"fb:reason:other:{suffix}"}])
+        new_kb.append([{"text": "📝 Қате ақпарат", "callback_data": f"fb:reason:info:{suffix}", "style": "danger"}])
+        new_kb.append([{"text": "🤖 ЖИ қатесі", "callback_data": f"fb:reason:ai:{suffix}", "style": "danger"}])
+        new_kb.append([{"text": "❌ Басқа", "callback_data": f"fb:reason:other:{suffix}", "style": "danger"}])
         
         edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
 
