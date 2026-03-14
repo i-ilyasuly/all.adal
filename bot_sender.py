@@ -1,11 +1,20 @@
 import requests
 from config import BOT_TOKEN
 
-def send_message(chat_id, text, reply_markup=None, message_effect_id=None):
+# ЖАҢА: reply_to_message_id аргументі қосылды
+def send_message(chat_id, text, reply_markup=None, message_effect_id=None, reply_to_message_id=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
-    if reply_markup: payload["reply_markup"] = reply_markup
-    if message_effect_id: payload["message_effect_id"] = str(message_effect_id)
+    
+    if reply_markup: 
+        payload["reply_markup"] = reply_markup
+        
+    if message_effect_id: 
+        payload["message_effect_id"] = str(message_effect_id)
+        
+    # ЖАҢА: Телеграмның заманауи Reply форматы
+    if reply_to_message_id:
+        payload["reply_parameters"] = {"message_id": reply_to_message_id}
     
     resp = requests.post(url, json=payload).json()
     
@@ -93,16 +102,6 @@ def send_chat_action(chat_id, action="typing"):
     payload = {"chat_id": chat_id, "action": action}
     requests.post(url, json=payload)
 
-# ЖАҢА: Стикер жіберу функциясы
-def send_sticker(chat_id, sticker_id):
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendSticker"
-    payload = {"chat_id": chat_id, "sticker": sticker_id}
-    resp = requests.post(url, json=payload).json()
-    if resp.get("ok"):
-        return resp["result"]["message_id"]
-    return None
-
-# ЖАҢА: Хабарламаны (немесе стикерді) өшіру функциясы
 def delete_message(chat_id, message_id):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteMessage"
     payload = {"chat_id": chat_id, "message_id": message_id}
