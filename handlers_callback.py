@@ -6,7 +6,7 @@ from payments import handle_buy_premium_callback
 
 SYMBAT_ID = 1042456426
 EFFECT_HALAL = "5046509860389126442"
-EFFECT_EXPIRED = "5104841245755180586"
+EFFECT_EXPIRED = "5104858069142078462"
 
 def handle_callback(cb):
     user_id = cb["from"]["id"] 
