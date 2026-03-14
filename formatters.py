@@ -60,8 +60,6 @@ def format_detail_message(item):
             msg += f"📅 <b>Жарамдылығы:</b> {d_start} - {d_end}\n"
         elif d_end:
             msg += f"📅 <b>Жарамдылығы:</b> {d_end} дейін\n"
-            
-        msg += f"📍 <b>Мекенжайы:</b> {item.get('address', 'Көрсетілмеген')}"
         
         keys = []
         if item.get('map_link'):
