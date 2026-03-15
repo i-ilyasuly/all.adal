@@ -10,9 +10,9 @@ EFFECT_HALAL = "5046509860389126442"
 EFFECT_EXPIRED = "5104858069142078462"
 
 def handle_callback(cb):
-    user_id = cb["from"]["id"] 
+    user_id = cb["from"]["id"]
     data = cb["data"]
-    
+
     is_inline = "inline_message_id" in cb
     if is_inline:
         chat_id = None
@@ -22,13 +22,12 @@ def handle_callback(cb):
         chat_id = cb["message"]["chat"]["id"]
         message_id = cb["message"]["message_id"]
         inline_msg_id = None
-    
+
     # --- USERNAME АРҚЫЛЫ СЫЙЛЫҚ: РАСТАУ ---
-    elif data.startswith("gift_username_confirm:"):
+    if data.startswith("gift_username_confirm:"):
         username_to_gift = data.split(":", 1)[1]
         answer_callback(cb["id"])
         clear_state(user_id)
-
         confirm_done = (
             f"✅ <b>@{username_to_gift}</b> расталды!\n\n"
             "Төмендегі шотты төлегеннен кейін сыйлық автоматты жіберіледі 👇"
@@ -41,7 +40,6 @@ def handle_callback(cb):
         answer_callback(cb["id"])
         clear_state(user_id)
         set_awaiting_username(user_id)
-
         cancel_text = (
             "🔄 <b>Юзернейм өзгертілді.</b>\n\n"
             "Сыйлағыңыз келетін адамның Telegram юзернеймін қайта жазыңыз:\n\n"
@@ -58,8 +56,6 @@ def handle_callback(cb):
         answer_callback(cb["id"])
 
         if gift_type == "username":
-            # Username енгізу режимін іске қосу
-            from gift_state import set_awaiting_username
             set_awaiting_username(user_id)
             prompt_text = (
                 "👤 <b>@username арқылы сыйлау</b>\n\n"
@@ -79,7 +75,7 @@ def handle_callback(cb):
         gender_val = data.split(":")[1]
         gender_kz = "Ер" if gender_val == "male" else "Әйел"
         answer_callback(cb["id"])
-        success_text = f"Рақмет, сақталды! 👍\n\nЕнді бастайық 🚀\nМаған кез келген өнімнің атын жазыңыз, суретін жіберіңіз немесе жақын маңдағы халал дәмханаларды іздеп көріңіз!"
+        success_text = "Рақмет, сақталды! 👍\n\nЕнді бастайық 🚀\nМаған кез келген өнімнің атын жазыңыз, суретін жіберіңіз немесе жақын маңдағы халал дәмханаларды іздеп көріңіз!"
         main_keyboard = {
             "keyboard": [
                 [{"text": "📍 Тұрған орнымды жіберу", "request_location": True}],
@@ -91,7 +87,7 @@ def handle_callback(cb):
         send_message(chat_id, "Мәзірдегі батырмаларды қолдана аласыз 👇", reply_markup=main_keyboard)
         set_user_gender(user_id, gender_kz)
         log_to_bigquery(user_id, "set_gender", gender_kz, "Профиль жаңартылды")
-            
+
     elif data.startswith("loc:"):
         answer_callback(cb["id"])
         parts = data.split(":")
@@ -107,47 +103,44 @@ def handle_callback(cb):
         if item:
             text, markup = format_detail_message(item)
             has_access, tier = check_access(user_id, user_id == SYMBAT_ID)
-            
+
             effect = None
             reaction = None
-            
+
             if tier in ["premium", "VIP"]:
                 status_text = item.get("status", "")
-                if "Белсенді" in status_text or "Рұқсат" in status_text: 
+                if "Белсенді" in status_text or "Рұқсат" in status_text:
                     effect = EFFECT_HALAL
                     reaction = "🎉"
-                elif "Мерзімі" in status_text or "⚠️" in status_text or "🚫" in status_text or "Қайтарып" in status_text: 
+                elif "Мерзімі" in status_text or "⚠️" in status_text or "🚫" in status_text or "Қайтарып" in status_text:
                     effect = EFFECT_EXPIRED
                     reaction = "👎"
 
             bot_msg_id = send_message(chat_id, text, reply_markup=markup, message_effect_id=effect)
-            
+
             if reaction and bot_msg_id:
                 set_message_reaction(chat_id, bot_msg_id, reaction)
-                
         else:
             answer_callback(cb["id"], text="Мәлімет табылмады 😔", show_alert=True)
 
-    # --- AI FEEDBACK (жаңа, нақты өңдеуші) ---
+    # --- AI FEEDBACK ---
     elif data == "fb:good:ai":
         answer_callback(cb["id"], text="Пікіріңізге рақмет! ❤️")
-        # AI жауабынан feedback батырмаларын алып тастаймыз
         edit_reply_markup(chat_id, message_id, {"inline_keyboard": []}, inline_msg_id)
         log_to_bigquery(user_id, "feedback", "👍 AI жауабы пайдалы", "Кері байланыс")
 
     elif data == "fb:bad:ai":
         answer_callback(cb["id"])
         new_kb = [
-            [{"text": "📝 Қате ақпарат", "callback_data": "fb:reason:info:ai", "style": "danger"}],
-            [{"text": "🤖 ЖИ қатесі", "callback_data": "fb:reason:ai:ai", "style": "danger"}],
-            [{"text": "❌ Басқа", "callback_data": "fb:reason:other:ai", "style": "danger"}]
+            [{"text": "📝 Қате ақпарат", "callback_data": "fb:reason:info:ai"}],
+            [{"text": "🤖 ЖИ қатесі", "callback_data": "fb:reason:ai:ai"}],
+            [{"text": "❌ Басқа", "callback_data": "fb:reason:other:ai"}]
         ]
         edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
 
     # --- ӨНІМ FEEDBACK ---
     elif data.startswith("fb:good"):
         answer_callback(cb["id"], text="Пікіріңізге рақмет! ❤️")
-        
         new_kb = []
         if not is_inline:
             existing_kb = cb["message"].get("reply_markup", {}).get("inline_keyboard", [])
@@ -161,14 +154,12 @@ def handle_callback(cb):
                 t_code, item_id = parts[3], parts[4]
                 item = get_item_by_id(t_code, item_id)
                 if item and item.get("map_link"):
-                    new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"], "style": "primary"}])
-                    
+                    new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"]}])
         edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
         log_to_bigquery(user_id, "feedback", "👍 Пайдалы", "Кері байланыс")
 
     elif data.startswith("fb:bad"):
         answer_callback(cb["id"])
-        
         new_kb = []
         if not is_inline:
             existing_kb = cb["message"].get("reply_markup", {}).get("inline_keyboard", [])
@@ -182,21 +173,18 @@ def handle_callback(cb):
                 t_code, item_id = parts[3], parts[4]
                 item = get_item_by_id(t_code, item_id)
                 if item and item.get("map_link"):
-                    new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"], "style": "primary"}])
-        
+                    new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"]}])
         suffix = data[7:]
-        new_kb.append([{"text": "📝 Қате ақпарат", "callback_data": f"fb:reason:info:{suffix}", "style": "danger"}])
-        new_kb.append([{"text": "🤖 ЖИ қатесі", "callback_data": f"fb:reason:ai:{suffix}", "style": "danger"}])
-        new_kb.append([{"text": "❌ Басқа", "callback_data": f"fb:reason:other:{suffix}", "style": "danger"}])
+        new_kb.append([{"text": "📝 Қате ақпарат", "callback_data": f"fb:reason:info:{suffix}"}])
+        new_kb.append([{"text": "🤖 ЖИ қатесі", "callback_data": f"fb:reason:ai:{suffix}"}])
+        new_kb.append([{"text": "❌ Басқа", "callback_data": f"fb:reason:other:{suffix}"}])
         edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
 
     elif data.startswith("fb:reason:"):
         parts = data.split(":")
         reason_code = parts[2]
         reason_text = "Қате ақпарат" if reason_code == "info" else "ЖИ қатесі" if reason_code == "ai" else "Басқа"
-        
         answer_callback(cb["id"], text="Рақмет! Түзетеміз 🛠", show_alert=True)
-        
         new_kb = []
         if not is_inline:
             existing_kb = cb["message"].get("reply_markup", {}).get("inline_keyboard", [])
@@ -209,7 +197,6 @@ def handle_callback(cb):
                 t_code, item_id = parts[4], parts[5]
                 item = get_item_by_id(t_code, item_id)
                 if item and item.get("map_link"):
-                    new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"], "style": "primary"}])
-                    
+                    new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"]}])
         edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
         log_to_bigquery(user_id, "feedback", f"👎 Қате ({reason_text})", "Кері байланыс")
