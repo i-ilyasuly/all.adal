@@ -97,6 +97,7 @@ def chat_with_ai(user_id, text, is_symbat, chat_id=None, message_id=None):
         full_prompt = f"НҰСҚАУЛЫҚ (ҚАТАҢ САҚТА): {system_instruction}\n\nҚОЛДАНУШЫНЫҢ СҰРАҒЫ: {text}"
         
         if chat_id and message_id:
+            from bot_sender import send_message as _send_msg
             response = chat.send_message(full_prompt, stream=True)
             full_text = ""
             # Bot API 9.5 sendMessageDraft — streaming үшін бірегей ID
@@ -108,7 +109,6 @@ def chat_with_ai(user_id, text, is_symbat, chat_id=None, message_id=None):
                     if hasattr(chunk, 'text') and chunk.text:
                         full_text += chunk.text
                     current_time = time.time()
-                    # sendMessageDraft-ты жиі шақыруға болады — edit_message-тен айырмасы осы
                     if current_time - last_draft_time >= 0.3 and full_text:
                         try:
                             send_message_draft(chat_id, format_ai_text(full_text), draft_id)
@@ -118,10 +118,17 @@ def chat_with_ai(user_id, text, is_symbat, chat_id=None, message_id=None):
             except Exception as stream_error:
                 print(f"[chat_with_ai] Streaming қатесі: {stream_error}")
                 if full_text:
-                    return format_ai_text(full_text)
+                    # Қате болса — draft жоқ, тікелей жіберіп None қайтарамыз
+                    _send_msg(chat_id, format_ai_text(full_text), reply_to_message_id=message_id)
+                    return None
                 return "Кешіріңіз, жауап жіберілу кезінде іркіліс болды. Қайта сұрап көресіз бе? 🔄"
 
-            return format_ai_text(full_text) if full_text else "Кешіріңіз, жауап алу мүмкін болмады. Қайта сұрап көресіз бе? 🔄"
+            if full_text:
+                # Streaming аяқталды — финалды нұсқаны жіберіп, None қайтарамыз
+                # handlers_message.py-да None болса send_message қайта шақырылмайды
+                _send_msg(chat_id, format_ai_text(full_text), reply_to_message_id=message_id)
+                return None
+            return "Кешіріңіз, жауап алу мүмкін болмады. Қайта сұрап көресіз бе? 🔄"
             
         else:
             response = chat.send_message(full_prompt)
