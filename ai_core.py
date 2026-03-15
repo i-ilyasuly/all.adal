@@ -8,7 +8,7 @@ from config import GEMINI_API_KEY, BUCKET_NAME, SUSPICIOUS_FOLDER
 from db_core import get_chat_history
 from search_logic import search_data
 from formatters import format_detail_message
-from bot_sender import edit_message
+from bot_sender import edit_message, send_message_draft
 
 genai.configure(api_key=GEMINI_API_KEY)
 storage_client = storage.Client()
@@ -99,27 +99,28 @@ def chat_with_ai(user_id, text, is_symbat, chat_id=None, message_id=None):
         if chat_id and message_id:
             response = chat.send_message(full_prompt, stream=True)
             full_text = ""
-            last_edit_time = 0
-            
+            # Bot API 9.5 sendMessageDraft — streaming үшін бірегей ID
+            draft_id = uuid.uuid4().hex
+            last_draft_time = 0
+
             try:
                 for chunk in response:
                     if hasattr(chunk, 'text') and chunk.text:
                         full_text += chunk.text
                     current_time = time.time()
-                    if current_time - last_edit_time >= 1:
-                        temp_text = format_ai_text(full_text) + " ✍️"
+                    # sendMessageDraft-ты жиі шақыруға болады — edit_message-тен айырмасы осы
+                    if current_time - last_draft_time >= 0.3 and full_text:
                         try:
-                            edit_message(chat_id, message_id, temp_text)
+                            send_message_draft(chat_id, format_ai_text(full_text), draft_id)
                         except Exception:
                             pass
-                        last_edit_time = current_time
+                        last_draft_time = current_time
             except Exception as stream_error:
                 print(f"[chat_with_ai] Streaming қатесі: {stream_error}")
-                # Егер жартылай мәтін жиналса — соны қайтарамыз
                 if full_text:
                     return format_ai_text(full_text)
                 return "Кешіріңіз, жауап жіберілу кезінде іркіліс болды. Қайта сұрап көресіз бе? 🔄"
-                    
+
             return format_ai_text(full_text) if full_text else "Кешіріңіз, жауап алу мүмкін болмады. Қайта сұрап көресіз бе? 🔄"
             
         else:
@@ -184,7 +185,7 @@ def handle_photo(image_bytes, chat_id, username):
     
     if all_found_items:
         if len(all_found_items) == 1:
-            text, markup = format_detail_message(all_found_items[0])
+            text, markup = format_detail_message(all_found_items[0], confidence='exact')
             final_text = f"👁 Суреттен <b>{product_names[0]}</b> брендін таныдым:\n\n{text}"
             return final_text, markup
         else:
