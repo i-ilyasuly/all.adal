@@ -136,19 +136,22 @@ def set_message_reaction(chat_id, message_id, emoji, is_big=True):
     }
     requests.post(url, json=payload)
 
-def send_gift_invoice(chat_id, gift_type, recipient_username=None):
+def send_gift_invoice(chat_id, gift_type, recipient_username=None, buyer_name=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendInvoice"
 
+    # Payload 128 символдан аспауы керек — buyer_name-ді қысқартамыз
+    safe_name = (buyer_name or "")[:40].strip()
+
     if gift_type == "inline":
-        desc = "Төлем жасалғаннан кейін сіз сыйлықты досыңыздың чатына тікелей (инлайн қорап қылып) жібере аласыз."
-        invoice_payload = "gift_premium_30_days_inline"
+        desc = "Төлем жасалғаннан кейін сіз сыйлықты досыңыздың чатына тікелей жібере аласыз."
+        invoice_payload = f"gift_premium_30_days_inline:{safe_name}"
     elif gift_type == "username" and recipient_username:
-        clean = recipient_username.lstrip("@")
+        clean = recipient_username.lstrip("@")[:32]
         desc = f"Төлем жасалғаннан кейін @{clean} пайдаланушысына сыйлық автоматты жіберіледі."
-        invoice_payload = f"gift_premium_30_days_username:{clean}"
+        invoice_payload = f"gift_premium_30_days_username:{clean}:{safe_name}"
     else:
-        desc = "Төлем жасалғаннан кейін сізге арнайы сыйлық сілтемесі беріледі. Соны досыңызға жібересіз."
-        invoice_payload = "gift_premium_30_days_link"
+        desc = "Төлем жасалғаннан кейін сізге арнайы сыйлық сілтемесі беріледі."
+        invoice_payload = f"gift_premium_30_days_link:{safe_name}"
 
     payload = {
         "chat_id": chat_id,
