@@ -33,6 +33,27 @@ def send_message(chat_id, text, reply_markup=None, message_effect_id=None, reply
         
     return None
 
+
+def send_message_draft(chat_id, text, draft_id):
+    """
+    Bot API 9.5 — streaming AI жауабы үшін.
+    Бір draft_id арқылы бірнеше рет шақырылады,
+    пайдаланушыда мәтін бірте-бірте пайда болады.
+    """
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessageDraft"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "HTML",
+        "draft_id": draft_id
+    }
+    resp = requests.post(url, json=payload).json()
+    if not resp.get("ok"):
+        # Қате болса үнсіз өтеміз — streaming үзілмесін
+        print(f"[send_message_draft] Қате: {resp.get('description', '')}")
+        return False
+    return True
+
 def edit_message(chat_id=None, message_id=None, text=None, reply_markup=None, inline_message_id=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText"
     payload = {"text": text, "parse_mode": "HTML"}
@@ -165,3 +186,63 @@ def send_gift_invoice(chat_id, gift_type, recipient_username=None, buyer_name=No
     resp = requests.post(url, json=payload).json()
     if not resp.get("ok"):
         print(f"[send_gift_invoice] Қате: {resp}")
+
+def send_tariff_invoice(chat_id, tariff_id, buyer_name=None):
+    """Белгілі тарифке шот жіберу — өзіне алу үшін"""
+    from tariffs import get_tariff_by_id
+    t = get_tariff_by_id(tariff_id)
+    if not t:
+        print(f"[send_tariff_invoice] Тариф табылмады: {tariff_id}")
+        return
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendInvoice"
+    if t["discount"] > 0:
+        desc = f"Шексіз іздеу, суретпен тану және жақын маңдағы орындарды {t['label']} бойы шектеусіз пайдаланыңыз! ({t['discount']}% үнемдеу)"
+    else:
+        desc = "Шексіз іздеу, суретпен тану және жақын маңдағы орындарды шектеусіз көру мүмкіндігі!"
+    payload = {
+        "chat_id": chat_id,
+        "title": f"⭐️ Premium — {t['label']}",
+        "description": desc,
+        "payload": tariff_id,
+        "provider_token": "",
+        "currency": "XTR",
+        "prices": [{"label": f"Premium {t['label']}", "amount": t['stars']}]
+    }
+    resp = requests.post(url, json=payload).json()
+    if not resp.get("ok"):
+        print(f"[send_tariff_invoice] Қате: {resp}")
+
+
+def send_gift_tariff_invoice(chat_id, tariff_id, gift_type, recipient_username=None, buyer_name=None):
+    """Белгілі тарифке сыйлық шоты"""
+    from tariffs import get_tariff_by_id
+    t = get_tariff_by_id(tariff_id)
+    if not t:
+        print(f"[send_gift_tariff_invoice] Тариф табылмады: {tariff_id}")
+        return
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendInvoice"
+    safe_name = (buyer_name or "")[:40].strip()
+
+    if gift_type == "inline":
+        desc = f"Төлем жасалғаннан кейін сіз сыйлықты досыңыздың чатына тікелей жібере аласыз ({t['label']})."
+        invoice_payload = f"gift_{tariff_id}_inline:{safe_name}"
+    elif gift_type == "username" and recipient_username:
+        clean = recipient_username.lstrip("@")[:32]
+        desc = f"Төлем жасалғаннан кейін @{clean} пайдаланушысына {t['label']} Premium сыйлық жіберіледі."
+        invoice_payload = f"gift_{tariff_id}_username:{clean}:{safe_name}"
+    else:
+        desc = f"Төлем жасалғаннан кейін сізге {t['label']} Premium сыйлық сілтемесі беріледі."
+        invoice_payload = f"gift_{tariff_id}_link:{safe_name}"
+
+    payload = {
+        "chat_id": chat_id,
+        "title": f"🎁 Premium Сыйлық — {t['label']}",
+        "description": desc,
+        "payload": invoice_payload,
+        "provider_token": "",
+        "currency": "XTR",
+        "prices": [{"label": f"Premium Сыйлық {t['label']}", "amount": t['stars']}]
+    }
+    resp = requests.post(url, json=payload).json()
+    if not resp.get("ok"):
+        print(f"[send_gift_tariff_invoice] Қате: {resp}")
