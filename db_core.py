@@ -152,16 +152,40 @@ def get_user_gender(user_id):
 def set_user_gender(user_id, gender):
     db.collection("users").document(str(user_id)).set({"gender": gender}, merge=True)
 
-def create_gift_code(buyer_id, buyer_name):
+def create_gift_code(buyer_id, buyer_name, recipient_username=None):
     """Сыйлық кодын генерациялап, draft_gifts базасына сақтайды"""
     code = "gift_" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    db.collection("draft_gifts").document(code).set({
+    data = {
         "buyer_id": str(buyer_id),
         "buyer_name": buyer_name,
         "status": "active",
         "created_at": firestore.SERVER_TIMESTAMP
-    })
+    }
+    if recipient_username:
+        clean = recipient_username.lstrip("@").lower()
+        data["recipient_username"] = clean
+        # pending_gifts колекциясына да жазамыз — алушы /start жазғанда табу үшін
+        db.collection("pending_gifts").document(clean).set({
+            "gift_code": code,
+            "buyer_name": buyer_name,
+            "created_at": firestore.SERVER_TIMESTAMP
+        })
+    db.collection("draft_gifts").document(code).set(data)
     return code
+
+def get_pending_gift_for_username(username):
+    """Пайдаланушының күтіп тұрған сыйлығын табу (алғаш /start жазғанда)"""
+    clean = username.lstrip("@").lower()
+    doc = db.collection("pending_gifts").document(clean).get()
+    if doc.exists:
+        data = doc.to_dict()
+        return data.get("gift_code"), data.get("buyer_name")
+    return None, None
+
+def delete_pending_gift(username):
+    """Сыйлық қабылданған соң pending_gifts-тен өшіру"""
+    clean = username.lstrip("@").lower()
+    db.collection("pending_gifts").document(clean).delete()
 
 def redeem_gift_code(code, user_id):
     """Сыйлық кодын қолдану (Premium беру)"""
