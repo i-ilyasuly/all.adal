@@ -35,36 +35,49 @@ def process_successful_payment(message):
     record_payment(chat_id, username, amount, payload, charge_id)
     log_to_bigquery(chat_id, "payment", f"{amount} Stars", "Сәтті төлем")
 
-    # 1. ӨЗІНЕ АЛСА
-    if payload == "premium_30_days":
-        grant_premium(chat_id, days=30)
+    # 1. ӨЗІНЕ АЛСА — барлық тарифтер
+    from tariffs import get_tariff_by_id
+    own_tariff = get_tariff_by_id(payload)
+    if own_tariff:
+        grant_premium(chat_id, days=own_tariff["days"])
         success_text = (
-            "🎉 <b>Төлем сәтті өтті! Құттықтаймыз!</b>\n\n"
-            "Сіз енді <b>Premium</b> қолданушысыз 👑\n"
-            "Алдағы 30 күн бойы барлық шектеулер алынып тасталды. Жобамызды қолдағаныңыз үшін үлкен рақмет! ❤️"
+            f"🎉 <b>Төлем сәтті өтті! Құттықтаймыз!</b>\n\n"
+            f"Сіз енді <b>Premium</b> қолданушысыз 👑\n"
+            f"Алдағы <b>{own_tariff['label']}</b> бойы барлық шектеулер алынып тасталды.\n"
+            "Жобамызды қолдағаныңыз үшін үлкен рақмет! ❤️"
         )
         send_message(chat_id, success_text, message_effect_id="5046509860389126442")
 
-    # 2. СІЛТЕМЕ АРҚЫЛЫ СЫЙЛЫҚ
-    elif payload.startswith("gift_premium_30_days_link:"):
-        buyer_name = payload.split(":", 1)[1] or username
-        code = create_gift_code(chat_id, buyer_name)
+    # 2. СІЛТЕМЕ АРҚЫЛЫ СЫЙЛЫҚ (кез келген тариф)
+    elif "_link:" in payload and payload.startswith("gift_premium_"):
+        parts = payload.split("_link:", 1)
+        tariff_id = parts[0].lstrip("gift_")  # premium_30_days т.б.
+        buyer_name = parts[1] or username
+        from tariffs import get_tariff_by_id
+        t = get_tariff_by_id(tariff_id) or {"label": "30 күн", "days": 30}
+        code = create_gift_code(chat_id, buyer_name, tariff_id=tariff_id)
         bot_username = "alladalbot"
         gift_link = f"https://t.me/{bot_username}?start={code}"
         success_text = (
-            "🎁 <b>Сыйлық сәтті сатып алынды!</b>\n\n"
+            f"🎁 <b>Сыйлық сәтті сатып алынды!</b>\n\n"
+            f"Мерзімі: <b>{t['label']}</b>\n"
             "Төмендегі сілтемені досыңызға жіберіңіз:\n\n"
             f"👉 {gift_link}\n\n"
             "<i>Ескерту: Бұл сілтемені тек 1 адам ғана қолдана алады!</i>"
         )
         send_message(chat_id, success_text, message_effect_id="5046509860389126442")
 
-    # 3. ТЕЛЕГРАМ ИНЛАЙН АРҚЫЛЫ СЫЙЛЫҚ
-    elif payload.startswith("gift_premium_30_days_inline:"):
-        buyer_name = payload.split(":", 1)[1] or username
-        code = create_gift_code(chat_id, buyer_name)
+    # 3. ТЕЛЕГРАМ ИНЛАЙН АРҚЫЛЫ СЫЙЛЫҚ (кез келген тариф)
+    elif "_inline:" in payload and payload.startswith("gift_premium_"):
+        parts = payload.split("_inline:", 1)
+        tariff_id = parts[0].lstrip("gift_")
+        buyer_name = parts[1] or username
+        from tariffs import get_tariff_by_id
+        t = get_tariff_by_id(tariff_id) or {"label": "30 күн", "days": 30}
+        code = create_gift_code(chat_id, buyer_name, tariff_id=tariff_id)
         success_text = (
-            "🎁 <b>Сыйлық сәтті сатып алынды!</b>\n\n"
+            f"🎁 <b>Сыйлық сәтті сатып алынды!</b>\n\n"
+            f"Мерзімі: <b>{t['label']}</b>\n"
             "Төмендегі батырманы басып, досыңызды таңдаңыз!\n\n"
             "<i>Ескерту: Бұл сыйлықты тек 1 адам ғана аша алады!</i>"
         )
@@ -75,12 +88,17 @@ def process_successful_payment(message):
         }
         send_message(chat_id, success_text, reply_markup=gift_markup, message_effect_id="5046509860389126442")
 
-    # 4. @USERNAME АРҚЫЛЫ СЫЙЛЫҚ
-    elif payload.startswith("gift_premium_30_days_username:"):
+    # 4. @USERNAME АРҚЫЛЫ СЫЙЛЫҚ (кез келген тариф)
+    elif "_username:" in payload and payload.startswith("gift_premium_"):
         # payload: gift_premium_30_days_username:aibek_kz:Аяулым
-        parts = payload.split(":")
-        recipient_username = parts[1] if len(parts) > 1 else ""
-        buyer_name = parts[2] if len(parts) > 2 else username
+        # tariff_id = premium_30_days, recipient = aibek_kz, buyer_name = Аяулым
+        pre, rest = payload.split("_username:", 1)
+        tariff_id = pre.lstrip("gift_")   # premium_30_days
+        rest_parts = rest.split(":", 1)
+        recipient_username = rest_parts[0]
+        buyer_name = rest_parts[1] if len(rest_parts) > 1 else username
+        from tariffs import get_tariff_by_id
+        t = get_tariff_by_id(tariff_id) or {"label": "30 күн", "days": 30}
         if not buyer_name:
             buyer_name = username
 
@@ -89,7 +107,7 @@ def process_successful_payment(message):
         direct_sent = False
 
         if recipient_id:
-            code = create_gift_code(chat_id, buyer_name, recipient_username=recipient_username)
+            code = create_gift_code(chat_id, buyer_name, recipient_username=recipient_username, tariff_id=tariff_id)
             gift_link = f"https://t.me/{bot_username}?start={code}"
             recipient_text = (
                 f"🎁 <b>Сізге сыйлық келді!</b>\n\n"
@@ -105,7 +123,7 @@ def process_successful_payment(message):
             result = send_message(recipient_id, recipient_text, reply_markup=recipient_markup, message_effect_id="5046509860389126442")
             direct_sent = result is not None
         else:
-            code = create_gift_code(chat_id, buyer_name, recipient_username=recipient_username)
+            code = create_gift_code(chat_id, buyer_name, recipient_username=recipient_username, tariff_id=tariff_id)
             gift_link = f"https://t.me/{bot_username}?start={code}"
 
         if direct_sent:
