@@ -78,7 +78,7 @@ def chat_with_ai(user_id, text, is_symbat, chat_id=None, message_id=None):
             "- Мәтінмен жылдам іздеу және Карта: 'Маған тек сурет емес, кез келген өнім немесе мекеме атын мәтінмен жазсаң, бар-жоғы 1 секундта тауып беремін. Мекемелердің сертификат мерзімін де (тіпті мерзімі бітіп, жарамсыз болып қалғанын да) қатесіз көрсетемін. Сосын баруға оңай болуы үшін астына 🗺 Картадан көру батырмасын қосып беремін'.\n"
             "- Е-қоспаларды (Ингредиенттер) тексеру: 'Мен тек өнімдерді емес, құрамдағы түрлі Е-қоспаларды да тексере аламын. Қоспаның халал, харам немесе күдікті екенін нақты айтамын. Ал егер күдікті болса, оның не үшін күдікті екеніне егжей-тегжейлі түсініктеме беремін'.\n"
             "- Суретпен тану: 'Дүкенде тұрып күмәндансаң, маған өнімнің суретін түсіріп жібере сал, өзім-ақ оқып беремін'.\n"
-            "- Локация: 'Далада қарның ашқанда, маған жай ғана тұрған орныңды (локация) жібере салсаң, ең жақын халал дәмханаларды тауып беремін'.\n\n"
+            "- Локация: 'Далада қарның ашқанда, маған жай ғана тұрған орыңды (локация) жібере салсаң, ең жақын халал дәмханаларды тауып беремін'.\n\n"
             
             "3. ҚАТАҢ ШЕКТЕУЛЕР (ДОЗИРОВКА):\n"
             "- Бір әңгімеде бұл мүмкіндіктердің бәрін бірдей тізіп айтпа! Бұл өте жасанды көрінеді. Бір сөйлескенде тек 1 ғана мүмкіндікті (мысалы, тек қоспаларды немесе тек инлайнды) өте жеңіл қыстырып өт.\n"
@@ -86,7 +86,7 @@ def chat_with_ai(user_id, text, is_symbat, chat_id=None, message_id=None):
         )
 
     history = get_chat_history(user_id)
-    formatted_history =[]
+    formatted_history = []
     for h in history:
         msg_content = str(h["parts"])
         if "батырмадан таңдаңыз" not in msg_content and "Міне, мен мыналарды таптым" not in msg_content and "Мен бірнеше нұсқа таптым" not in msg_content:
@@ -101,30 +101,38 @@ def chat_with_ai(user_id, text, is_symbat, chat_id=None, message_id=None):
             full_text = ""
             last_edit_time = 0
             
-            for chunk in response:
-                full_text += chunk.text
-                current_time = time.time()
-                
-                if current_time - last_edit_time >= 1:
-                    temp_text = format_ai_text(full_text) + " ✍️"
-                    try:
-                        edit_message(chat_id, message_id, temp_text)
-                    except:
-                        pass 
-                    last_edit_time = current_time
+            try:
+                for chunk in response:
+                    if hasattr(chunk, 'text') and chunk.text:
+                        full_text += chunk.text
+                    current_time = time.time()
+                    if current_time - last_edit_time >= 1:
+                        temp_text = format_ai_text(full_text) + " ✍️"
+                        try:
+                            edit_message(chat_id, message_id, temp_text)
+                        except Exception:
+                            pass
+                        last_edit_time = current_time
+            except Exception as stream_error:
+                print(f"[chat_with_ai] Streaming қатесі: {stream_error}")
+                # Егер жартылай мәтін жиналса — соны қайтарамыз
+                if full_text:
+                    return format_ai_text(full_text)
+                return "Кешіріңіз, жауап жіберілу кезінде іркіліс болды. Қайта сұрап көресіз бе? 🔄"
                     
-            return format_ai_text(full_text)
+            return format_ai_text(full_text) if full_text else "Кешіріңіз, жауап алу мүмкін болмады. Қайта сұрап көресіз бе? 🔄"
             
         else:
             response = chat.send_message(full_prompt)
             return format_ai_text(response.text)
             
     except Exception as e:
+        print(f"[chat_with_ai] Жалпы қате: {e}")
         return "Кешіріңіз, жүйеде шағын іркіліс болды. Сұрағыңызды немесе суретті қайта жібересіз бе? 🔄"
 
 def process_image_with_ai(image_bytes):
     model = genai.GenerativeModel('gemini-3.1-flash-lite-preview') 
-    image_parts =[{"mime_type": "image/jpeg", "data": image_bytes}]
+    image_parts = [{"mime_type": "image/jpeg", "data": image_bytes}]
     
     prompt = """
     Сен өте мұқият сарапшысың. Мына суретке қарап, ТЕК ҚАНА АЛДЫҢҒЫ ПЛАНДАҒЫ (фокустағы) негізгі өнімді анықта. Артқы фондағы немесе шеттегі басқа өнімдерді елеме.
@@ -143,11 +151,12 @@ def process_image_with_ai(image_bytes):
         result_text = clean_json_string(response.text)
         return json.loads(result_text)
     except Exception as e:
-        return {"product_names":[f"ҚАТЕ_МӘТІНІ: {str(e)}"]}
+        print(f"[process_image_with_ai] Қате: {e}")
+        return {"product_names": [f"ҚАТЕ_МӘТІНІ: {str(e)}"]}
 
 def handle_photo(image_bytes, chat_id, username):
     ai_result = process_image_with_ai(image_bytes)
-    product_names = ai_result.get("product_names",[])
+    product_names = ai_result.get("product_names", [])
     
     if not product_names:
         return "🤷‍♂️ Суреттен анық атау немесе бренд тани алмадым.", None
@@ -155,7 +164,7 @@ def handle_photo(image_bytes, chat_id, username):
     if "ҚАТЕ_МӘТІНІ:" in product_names[0]:
         return f"❌ <b>Қате:</b> {product_names[0]}", None
         
-    all_found_items =[]
+    all_found_items = []
     seen_ids = set()
     
     for name in product_names:
@@ -180,7 +189,7 @@ def handle_photo(image_bytes, chat_id, username):
             return final_text, markup
         else:
             reply_text = f"🔍 Суреттен <b>{product_names[0]}</b> брендін таныдым. Сізге нақты қайсысы керек?\n\n"
-            keyboard =[]
+            keyboard = []
             for idx, item in enumerate(all_found_items[:5]):
                 if item['type'] == 'Мекеме':
                     desc_text = f"📍 {item.get('address', 'Мекенжай жоқ')}"
