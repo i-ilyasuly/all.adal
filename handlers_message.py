@@ -142,7 +142,14 @@ def handle_message(msg):
             return
 
         elif text == "⭐️ Premium алу":
-            send_invoice(chat_id)
+            send_chat_action(chat_id, "typing")
+            from tariffs import get_tariff_keyboard
+            tariff_text = (
+                "⭐️ <b>Premium жазылым</b>\n\n"
+                "Шексіз іздеу, суретпен тану және жақын маңдағы халал орындарды шектеусіз пайдаланыңыз!\n\n"
+                "Қанша мерзімге алғыңыз келеді?"
+            )
+            send_message(chat_id, tariff_text, reply_markup=get_tariff_keyboard("buy"), reply_to_message_id=user_msg_id)
             return
 
         elif text.startswith("/start"):
@@ -151,10 +158,13 @@ def handle_message(msg):
             parts = text.split(" ")
             if len(parts) > 1 and parts[1].startswith("gift_"):
                 gift_code = parts[1]
-                success, buyer_name = redeem_gift_code(gift_code, chat_id)
+                success, buyer_name, gift_days = redeem_gift_code(gift_code, chat_id)
                 
                 if success:
-                    gift_msg = f"🎉 <b>Құттықтаймыз!</b>\n\n<b>{buyer_name}</b> сізге <b>30 күн Premium</b> сыйлады! 🎁\nЕнді сіз ботты шектеусіз қолдана аласыз. Іздеуді бастай беріңіз!"
+                    from tariffs import TARIFFS
+                    # Күн санына қарап тариф атауын табамыз
+                    gift_label = next((t["label"] for t in TARIFFS if t["days"] == gift_days), f"{gift_days} күн")
+                    gift_msg = f"🎉 <b>Құттықтаймыз!</b>\n\n<b>{buyer_name}</b> сізге <b>{gift_label} Premium</b> сыйлады! 🎁\nЕнді сіз ботты шектеусіз қолдана аласыз. Іздеуді бастай беріңіз!"
                     bot_msg_id = send_message(chat_id, gift_msg, reply_markup=_main_keyboard(), reply_to_message_id=user_msg_id, message_effect_id=EFFECT_HALAL)
                     
                     set_message_reaction(chat_id, user_msg_id, "❤")
@@ -183,12 +193,14 @@ def handle_message(msg):
                 if username and username != "жоқ":
                     gift_code, buyer_name = get_pending_gift_for_username(username)
                     if gift_code:
-                        success, _ = redeem_gift_code(gift_code, chat_id)
+                        success, _, gift_days = redeem_gift_code(gift_code, chat_id)
                         if success:
                             delete_pending_gift(username)
+                            from tariffs import TARIFFS
+                            gift_label = next((t["label"] for t in TARIFFS if t["days"] == gift_days), f"{gift_days} күн")
                             gift_msg = (
                                 f"🎁 <b>Сізге сыйлық бар екен!</b>\n\n"
-                                f"<b>{buyer_name}</b> сізге <b>30 күн Premium</b> сыйлапты! 🎉\n\n"
+                                f"<b>{buyer_name}</b> сізге <b>{gift_label} Premium</b> сыйлапты! 🎉\n\n"
                                 f"Ботты шектеусіз қолдана бастаңыз 👇"
                             )
                             bot_msg_id = send_message(chat_id, gift_msg, reply_markup=_main_keyboard(), reply_to_message_id=user_msg_id, message_effect_id=EFFECT_HALAL)
@@ -230,35 +242,51 @@ def handle_message(msg):
                 send_chat_action(chat_id, "typing")
                 
                 if len(found_items) == 1:
-                    reply_text, markup = format_detail_message(found_items[0])
+                    confidence = found_items[0].get('confidence', 'exact')
+                    reply_text, markup = format_detail_message(found_items[0], confidence=confidence, query_text=text)
                     effect = None
                     reaction = None
-                    if tier in ["premium", "VIP"]:
+                    # Fuzzy нәтижеде шашу эффектісі болмасын — сенімсіз
+                    if confidence == 'exact' and tier in ["premium", "VIP"]:
                         status_text = found_items[0].get("status", "")
-                        if "Белсенді" in status_text or "Рұқсат" in status_text: 
+                        if "Белсенді" in status_text or "Рұқсат" in status_text:
                             effect = EFFECT_HALAL
                             reaction = "🎉"
-                        elif "Мерзімі" in status_text or "⚠️" in status_text or "Қайтарып" in status_text or "🚫" in status_text: 
+                        elif "Мерзімі" in status_text or "⚠️" in status_text or "Қайтарып" in status_text or "🚫" in status_text:
                             effect = EFFECT_EXPIRED
                             reaction = "👎"
+                    elif confidence == 'fuzzy' and tier in ["premium", "VIP"]:
+                        reaction = "🤔"  # Fuzzy нәтижеде сұрақ белгісі
                     bot_msg_id = send_message(chat_id, reply_text, reply_markup=markup, message_effect_id=effect, reply_to_message_id=user_msg_id)
                     if reaction and bot_msg_id:
                         set_message_reaction(chat_id, bot_msg_id, reaction)
                     save_chat_history(chat_id, "user", text)
                     save_chat_history(chat_id, "model", reply_text)
-                    log_to_bigquery(chat_id, "text_search", text, "Табылды (1)")
+                    log_to_bigquery(chat_id, "text_search", text, f"Табылды (1/{confidence})")
                     increment_usage(chat_id)
                 else:
+                    # Exact және fuzzy нәтижелерді бөліп көрсетеміз
+                    exact_items = [i for i in found_items[:5] if i.get('confidence') == 'exact']
+                    fuzzy_items = [i for i in found_items[:5] if i.get('confidence') == 'fuzzy']
+
                     reply_text = f"🔍 <b>Мен бірнеше нұсқа таптым. Сізге нақты қайсысы керек?</b>\n\n"
                     keyboard = []
-                    for idx, item in enumerate(found_items[:5]):
+                    display_items = exact_items + fuzzy_items
+
+                    for idx, item in enumerate(display_items):
+                        confidence = item.get('confidence', 'exact')
+                        prefix = "❓ " if confidence == 'fuzzy' else ""
                         if item['type'] == 'Мекеме':
                             desc_text = f"📍 {item.get('address', '')}"
                         else:
                             desc_text = f"🏷 {item.get('desc', '')}"
-                        reply_text += f"<b>{idx+1}. «{item['title']}»</b>\n{desc_text}\n\n"
+                        reply_text += f"<b>{idx+1}. {prefix}«{item['title']}»</b>\n{desc_text}\n"
+                        if confidence == 'fuzzy':
+                            reply_text += f"<i>⚠️ Іздеген атауыңызға ұқсас, бірақ нақты сәйкес емес</i>\n"
+                        reply_text += "\n"
                         t_code = "c" if item['type'] == "Мекеме" else "i"
-                        keyboard.append([{"text": f"{idx+1}. «{item['title']}»", "callback_data": f"itm:{t_code}:{item['id']}"}])
+                        keyboard.append([{"text": f"{idx+1}. {prefix}«{item['title']}»", "callback_data": f"itm:{t_code}:{item['id']}"}])
+
                     bot_msg_id = send_message(chat_id, reply_text, reply_markup={"inline_keyboard": keyboard}, reply_to_message_id=user_msg_id)
                     if tier in ["premium", "VIP"] and bot_msg_id:
                         set_message_reaction(chat_id, bot_msg_id, "🤔")
@@ -294,16 +322,12 @@ def _handle_username_input(chat_id, user_msg_id, text):
     """Пайдаланушы @username жазғанда валидациялау"""
     raw = text.strip()
 
-    # Бас тарту батырмасы
-    if raw == "❌ Бас тарту":
-        clear_state(chat_id)
-        send_message(
-            chat_id,
-            "↩️ Юзернейм енгізу болдырылмады.",
-            reply_markup=_main_keyboard(),
-            reply_to_message_id=user_msg_id
-        )
-        return
+    # Бас тарту батырмасы — барлық қате хабарларда қайталанады
+    cancel_markup = {
+        "inline_keyboard": [[
+            {"text": "❌ Бас тарту", "callback_data": "gift_username_cancel"}
+        ]]
+    }
 
     # Кирилица тексеру
     if _has_cyrillic(raw):
@@ -313,6 +337,7 @@ def _handle_username_input(chat_id, user_msg_id, text):
             "Telegram юзернеймі тек <b>латын әріптерінен</b> тұрады.\n"
             "Мысал: <code>@aibek_kz</code>\n\n"
             "Қайтадан жазыңыз 👇",
+            reply_markup=cancel_markup,
             reply_to_message_id=user_msg_id
         )
         return
@@ -325,6 +350,7 @@ def _handle_username_input(chat_id, user_msg_id, text):
             f"Сіз жазғаныңыз: <code>{raw}</code>\n"
             f"Дұрысы: <code>@{raw}</code>\n\n"
             "Қайтадан жазыңыз 👇",
+            reply_markup=cancel_markup,
             reply_to_message_id=user_msg_id
         )
         return
@@ -340,25 +366,26 @@ def _handle_username_input(chat_id, user_msg_id, text):
             "• Ұзындығы 5–32 символ\n\n"
             f"Сіз жазғаныңыз: <code>{raw}</code>\n\n"
             "Қайтадан жазыңыз 👇",
+            reply_markup=cancel_markup,
             reply_to_message_id=user_msg_id
         )
         return
 
-    # Дұрыс — растауға өту
+    # Дұрыс — растауға өту (бас тарту батырмасы мұнда да бар)
     clean = raw.lstrip("@")
     set_confirm_username(chat_id, clean)
 
     confirm_text = (
         f"✅ Юзернейм қабылданды!\n\n"
         f"Сыйлық мына адамға жіберіледі: <b>@{clean}</b>\n\n"
-        f"⚠️ <b>Назар аударыңыз:</b> Растағаннан кейін юзернеймді өзгерту мүмкін болмайды. "
-        f"Егер қате жазылған болса, «❌ Жоқ, өзгертемін» батырмасын басыңыз.\n\n"
+        f"⚠️ <b>Назар аударыңыз:</b> Растағаннан кейін юзернеймді өзгерту мүмкін болмайды.\n\n"
         f"Растайсыз ба?"
     )
     confirm_markup = {
         "inline_keyboard": [
             [{"text": f"✅ Иә, @{clean} — дұрыс", "callback_data": f"gift_username_confirm:{clean}"}],
-            [{"text": "❌ Жоқ, өзгертемін", "callback_data": "gift_username_cancel"}]
+            [{"text": "✏️ Жоқ, өзгертемін", "callback_data": "gift_username_retry"}],
+            [{"text": "❌ Бас тарту", "callback_data": "gift_username_cancel"}]
         ]
     }
     send_message(chat_id, confirm_text, reply_markup=confirm_markup, reply_to_message_id=user_msg_id)
