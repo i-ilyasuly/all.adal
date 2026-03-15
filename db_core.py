@@ -126,8 +126,25 @@ def increment_usage(user_id):
         }, merge=True)
 
 def grant_premium(user_id, days=30):
+    """
+    Premium мерзімін қосады.
+    Белсенді тариф болса — соның үстіне қосады (жазып тастамайды).
+    Мысалы: 20 күн қалған + 30 күн = 50 күн болады.
+    """
     doc_ref = db.collection("users").document(str(user_id))
-    new_date = _now() + timedelta(days=days)
+    doc = doc_ref.get()
+
+    base = _now()
+    if doc.exists:
+        prem_until = doc.to_dict().get("premium_until")
+        if prem_until:
+            if isinstance(prem_until, datetime) and prem_until.tzinfo is None:
+                prem_until = prem_until.replace(tzinfo=timezone.utc)
+            # Белсенді тариф болса — соның аяғынан қосамыз
+            if isinstance(prem_until, datetime) and prem_until > base:
+                base = prem_until
+
+    new_date = base + timedelta(days=days)
     doc_ref.set({"premium_until": new_date}, merge=True)
 
 def revoke_premium(user_id):
@@ -152,13 +169,14 @@ def get_user_gender(user_id):
 def set_user_gender(user_id, gender):
     db.collection("users").document(str(user_id)).set({"gender": gender}, merge=True)
 
-def create_gift_code(buyer_id, buyer_name, recipient_username=None):
+def create_gift_code(buyer_id, buyer_name, recipient_username=None, tariff_id=None):
     """Сыйлық кодын генерациялап, draft_gifts базасына сақтайды"""
     code = "gift_" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
     data = {
         "buyer_id": str(buyer_id),
         "buyer_name": buyer_name,
         "status": "active",
+        "tariff_id": tariff_id or "premium_30_days",
         "created_at": firestore.SERVER_TIMESTAMP
     }
     if recipient_username:
@@ -200,7 +218,11 @@ def redeem_gift_code(code, user_id):
                 "used_by": str(user_id), 
                 "used_at": firestore.SERVER_TIMESTAMP
             }, merge=True)
-            grant_premium(user_id, days=30)
-            return True, data.get("buyer_name", "Жасырын адам")
+            # Тарифке сәйкес күн санын аламыз
+            from tariffs import get_tariff_by_id
+            tariff_id = data.get("tariff_id", "premium_30_days")
+            t = get_tariff_by_id(tariff_id) or {"days": 30}
+            grant_premium(user_id, days=t["days"])
+            return True, data.get("buyer_name", "Жасырын адам"), t["days"]
             
-    return False, None
+    return False, None, 0
