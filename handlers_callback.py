@@ -3,11 +3,30 @@ from db_core import set_user_gender, log_to_bigquery, get_item_by_id, check_acce
 from search_logic import get_nearby_companies
 from formatters import format_detail_message
 from payments import handle_buy_premium_callback
-from gift_state import set_awaiting_username, clear_state, get_pending_username
+from gift_state import (set_awaiting_username, clear_state, get_pending_username,
+                        set_pending_anon, get_pending_anon)
 
 SYMBAT_ID = 1042456426
 EFFECT_HALAL = "5046509860389126442"
 EFFECT_EXPIRED = "5104858069142078462"
+
+def _ask_anon(chat_id, message_id, gift_type, recipient_username=None):
+    """Анонимді/атымен сұрау батырмаларын шығару"""
+    text = (
+        "🎭 <b>Сыйлықты қалай жібергіңіз келеді?</b>\n\n"
+        "👤 <b>Атыңызбен</b> — алушы сіздің есіміңізді көреді\n"
+        "🎭 <b>Анонимді</b> — алушы кімнен екенін білмейді"
+    )
+    # recipient_username-ді callback_data-ға кодтаймыз
+    r = recipient_username or ""
+    markup = {
+        "inline_keyboard": [
+            [{"text": "👤 Атыммен", "callback_data": f"gift_anon:named:{gift_type}:{r}"}],
+            [{"text": "🎭 Анонимді", "callback_data": f"gift_anon:anon:{gift_type}:{r}"}]
+        ]
+    }
+    edit_message(chat_id, message_id, text, markup)
+
 
 def handle_callback(cb):
     user_id = cb["from"]["id"]
@@ -23,17 +42,43 @@ def handle_callback(cb):
         message_id = cb["message"]["message_id"]
         inline_msg_id = None
 
+    # --- АНОНИМДІ/АТЫМЕН ТАҢДАУ ---
+    if data.startswith("gift_anon:"):
+        parts = data.split(":")
+        # gift_anon:named:link:  немесе  gift_anon:anon:username:aibek_kz
+        anon_type = parts[1]        # "named" / "anon"
+        gift_type = parts[2]        # "link" / "inline" / "username"
+        recipient = parts[3] if len(parts) > 3 else ""
+
+        answer_callback(cb["id"])
+
+        # Сатып алушының атын немесе "Жасырын жанашыр" деп сақтаймыз
+        buyer_name_display = cb["from"].get("first_name", "Жанашыр") if anon_type == "named" else "Жасырын жанашыр"
+
+        if gift_type == "username" and recipient:
+            confirm_text = (
+                f"✅ Расталды!\n\n"
+                f"Алушы: <b>@{recipient}</b>\n"
+                f"Сіз: <b>{buyer_name_display}</b>\n\n"
+                f"Төмендегі шотты төлегеннен кейін сыйлық жіберіледі 👇"
+            )
+            edit_message(chat_id, message_id, confirm_text)
+            send_gift_invoice(chat_id, "username", recipient_username=recipient, buyer_name=buyer_name_display)
+        else:
+            confirm_text = (
+                f"✅ Расталды! Сіз: <b>{buyer_name_display}</b>\n\n"
+                f"Төмендегі шотты төлегеннен кейін сыйлықты жіберуге нұсқаулық беріледі 👇"
+            )
+            edit_message(chat_id, message_id, confirm_text)
+            send_gift_invoice(chat_id, gift_type, buyer_name=buyer_name_display)
+
     # --- USERNAME АРҚЫЛЫ СЫЙЛЫҚ: РАСТАУ ---
-    if data.startswith("gift_username_confirm:"):
+    elif data.startswith("gift_username_confirm:"):
         username_to_gift = data.split(":", 1)[1]
         answer_callback(cb["id"])
         clear_state(user_id)
-        confirm_done = (
-            f"✅ <b>@{username_to_gift}</b> расталды!\n\n"
-            "Төмендегі шотты төлегеннен кейін сыйлық автоматты жіберіледі 👇"
-        )
-        edit_message(chat_id, message_id, confirm_done)
-        send_gift_invoice(chat_id, "username", recipient_username=username_to_gift)
+        # Username расталды — енді анонимді/атымен сұраймыз
+        _ask_anon(chat_id, message_id, "username", recipient_username=username_to_gift)
 
     # --- USERNAME АРҚЫЛЫ СЫЙЛЫҚ: БАС ТАРТУ ---
     elif data == "gift_username_cancel":
@@ -63,9 +108,8 @@ def handle_callback(cb):
                 "✅ Дұрыс формат: <code>@username</code>\n"
                 "❌ Қате: <code>username</code> (@ жоқ)\n"
                 "❌ Қате: кириллица әріптері\n\n"
-                "<i>Ескерту: юзернейм міндетті түрде @ белгісінен басталуы керек және тек латын әріптерінен тұруы тиіс.</i>"
+                "<i>Юзернейм міндетті түрде @ белгісінен басталуы керек.</i>"
             )
-            # Бас тарту батырмасы — username режимінен шығу үшін
             cancel_keyboard = {
                 "keyboard": [[{"text": "❌ Бас тарту"}]],
                 "resize_keyboard": True,
@@ -74,9 +118,8 @@ def handle_callback(cb):
             edit_message(chat_id, message_id, prompt_text)
             send_message(chat_id, "👇 Юзернейм жазыңыз немесе бас тартыңыз:", reply_markup=cancel_keyboard)
         else:
-            text = "🎁 <b>Сыйлық әдісі таңдалды!</b>\n\nТөмендегі шотты төлегеннен кейін, сізге сыйлықты жіберуге арналған нұсқаулық беріледі 👇"
-            edit_message(chat_id, message_id, text)
-            send_gift_invoice(chat_id, gift_type)
+            # Алдымен анонимді/атымен сұраймыз
+            _ask_anon(chat_id, message_id, gift_type)
 
     elif data.startswith("gender:"):
         gender_val = data.split(":")[1]
@@ -110,10 +153,8 @@ def handle_callback(cb):
         if item:
             text, markup = format_detail_message(item)
             has_access, tier = check_access(user_id, user_id == SYMBAT_ID)
-
             effect = None
             reaction = None
-
             if tier in ["premium", "VIP"]:
                 status_text = item.get("status", "")
                 if "Белсенді" in status_text or "Рұқсат" in status_text:
@@ -122,9 +163,7 @@ def handle_callback(cb):
                 elif "Мерзімі" in status_text or "⚠️" in status_text or "🚫" in status_text or "Қайтарып" in status_text:
                     effect = EFFECT_EXPIRED
                     reaction = "👎"
-
             bot_msg_id = send_message(chat_id, text, reply_markup=markup, message_effect_id=effect)
-
             if reaction and bot_msg_id:
                 set_message_reaction(chat_id, bot_msg_id, reaction)
         else:
