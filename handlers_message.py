@@ -1,5 +1,5 @@
 import random
-from bot_sender import send_message, edit_message, send_chat_action, delete_message, download_photo, set_message_reaction, send_invoice, send_gift_invoice
+from bot_sender import send_message, edit_message, send_chat_action, download_photo, set_message_reaction, send_invoice, send_gift_invoice
 from db_core import (add_user, save_chat_history, log_to_bigquery, check_access, 
                      increment_usage, revoke_premium, get_user_gender, redeem_gift_code)
 from search_logic import search_data, get_nearby_companies
@@ -8,8 +8,8 @@ from ai_core import handle_photo, chat_with_ai
 from payments import process_successful_payment, get_premium_keyboard
 
 SYMBAT_ID = 1042456426
-EFFECT_HALAL = "5046509860389126442"    
-EFFECT_EXPIRED = "5104858069142078462"  
+EFFECT_HALAL = "5046509860389126442"    # 🎉 Шашу
+EFFECT_EXPIRED = "5104858069142078462"  # 👎 Дизлайк
 
 def handle_message(msg):
     chat_id = msg["chat"]["id"]
@@ -95,12 +95,22 @@ def handle_message(msg):
             "resize_keyboard": True
         }
 
-        # ЖАҢА: Таңдау жасау мүмкіндігі (Invoice алдында)
+        # ЖАҢА: Төлем алдында сыйлау әдісін сұраймыз
         if text == "🎁 Premium сыйлау":
-            choice_text = "🎁 <b>Сыйлықты қалай жеткізгіңіз келеді?</b>\n\nТөлем жасамас бұрын ыңғайлы әдісті таңдаңыз:"
-            choice_markup = {"inline_keyboard": [[{"text": "🔗 Сілтеме арқылы", "callback_data": "gift_choice:link", "style": "primary"}],[{"text": "📤 Тікелей чатқа жіберу (Инлайн)", "callback_data": "gift_choice:inline", "style": "primary"}]
-            ]}
-            send_message(chat_id, choice_text, reply_markup=choice_markup, reply_to_message_id=user_msg_id)
+            send_chat_action(chat_id, "typing")
+            gift_text = (
+                "🎁 <b>Premium сыйлау</b>\n\n"
+                "Сыйлықты досыңызға қалай жібергіңіз келеді?\n\n"
+                "1️⃣ <b>Сілтеме арқылы</b> — WhatsApp, Инстаграм немесе басқа желілер арқылы жіберуге ыңғайлы.\n"
+                "2️⃣ <b>Телеграм арқылы</b> — Досыңыздың Телеграм чатына әдемі сыйлық қорабын (батырмамен) жіберу үшін."
+            )
+            gift_markup = {
+                "inline_keyboard": [[{"text": "🔗 Сілтеме арқылы", "callback_data": "gift_type:link", "style": "primary"}],[{"text": "💬 Телеграм арқылы (Әдемі)", "callback_data": "gift_type:inline", "style": "success"}]
+                ]
+            }
+            bot_msg_id = send_message(chat_id, gift_text, reply_markup=gift_markup, reply_to_message_id=user_msg_id)
+            if bot_msg_id:
+                set_message_reaction(chat_id, bot_msg_id, "🤔")
             return
 
         elif text == "⭐️ Premium алу":
@@ -119,6 +129,7 @@ def handle_message(msg):
                     gift_msg = f"🎉 <b>Құттықтаймыз!</b>\n\n<b>{buyer_name}</b> сізге <b>30 күн Premium</b> сыйлады! 🎁\nЕнді сіз ботты шектеусіз қолдана аласыз. Іздеуді бастай беріңіз!"
                     bot_msg_id = send_message(chat_id, gift_msg, reply_markup=main_keyboard, reply_to_message_id=user_msg_id, message_effect_id=EFFECT_HALAL)
                     
+                    set_message_reaction(chat_id, user_msg_id, "❤")
                     if bot_msg_id: set_message_reaction(chat_id, bot_msg_id, "🎉")
                     
                     add_user(chat_id, first_name, username)
