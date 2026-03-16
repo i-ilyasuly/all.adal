@@ -21,9 +21,9 @@ def _get_city(lat, lon):
         from config import GEOCODING_API_KEY
         url = "https://maps.googleapis.com/maps/api/geocode/json"
         params = {"latlng": f"{lat},{lon}", "key": GEOCODING_API_KEY, "language": "ru"}
-        resp = _requests.get(url, params=params, timeout=5).json()
-        if resp.get("status") == "OK":
-            for result in resp["results"]:
+        data = _requests.get(url, params=params, timeout=10).json()
+        if data.get("status") == "OK":
+            for result in data["results"]:
                 for component in result["address_components"]:
                     if "locality" in component["types"]:
                         return component["long_name"]
