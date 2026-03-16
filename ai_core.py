@@ -98,36 +98,39 @@ def chat_with_ai(user_id, text, is_symbat, chat_id=None, message_id=None):
         
         if chat_id and message_id:
             from bot_sender import send_message as _send_msg
+            # Алдымен «жазып жатыр...» хабары жіберіледі, кейін edit арқылы жаңартылады
+            placeholder_id = _send_msg(chat_id, "✍️", reply_to_message_id=message_id)
+
             response = chat.send_message(full_prompt, stream=True)
             full_text = ""
-            # Bot API 9.5 sendMessageDraft — streaming үшін бірегей ID
-            draft_id = uuid.uuid4().hex
-            last_draft_time = 0
+            last_edit_time = 0
 
             try:
                 for chunk in response:
                     if hasattr(chunk, 'text') and chunk.text:
                         full_text += chunk.text
                     current_time = time.time()
-                    if current_time - last_draft_time >= 0.3 and full_text:
+                    if current_time - last_edit_time >= 1.0 and full_text and placeholder_id:
                         try:
-                            send_message_draft(chat_id, format_ai_text(full_text), draft_id)
+                            edit_message(chat_id, placeholder_id, format_ai_text(full_text) + " ✍️")
                         except Exception:
                             pass
-                        last_draft_time = current_time
+                        last_edit_time = current_time
             except Exception as stream_error:
                 print(f"[chat_with_ai] Streaming қатесі: {stream_error}")
                 if full_text:
-                    # Қате болса — draft жоқ, тікелей жіберіп None қайтарамыз
-                    _send_msg(chat_id, format_ai_text(full_text), reply_to_message_id=message_id)
-                    return None
+                    if placeholder_id:
+                        edit_message(chat_id, placeholder_id, format_ai_text(full_text))
+                        return None
+                    return format_ai_text(full_text)
                 return "Кешіріңіз, жауап жіберілу кезінде іркіліс болды. Қайта сұрап көресіз бе? 🔄"
 
             if full_text:
-                # Streaming аяқталды — финалды нұсқаны жіберіп, None қайтарамыз
-                # handlers_message.py-да None болса send_message қайта шақырылмайды
-                _send_msg(chat_id, format_ai_text(full_text), reply_to_message_id=message_id)
-                return None
+                # Streaming аяқталды — placeholder хабарды финалды мәтінмен алмастырамыз
+                if placeholder_id:
+                    edit_message(chat_id, placeholder_id, format_ai_text(full_text))
+                    return None
+                return format_ai_text(full_text)
             return "Кешіріңіз, жауап алу мүмкін болмады. Қайта сұрап көресіз бе? 🔄"
             
         else:
@@ -167,10 +170,10 @@ def handle_photo(image_bytes, chat_id, username):
     product_names = ai_result.get("product_names", [])
     
     if not product_names:
-        return "🤷‍♂️ Суреттен анық атау немесе бренд тани алмадым.", None
+        return "🤷‍♂️ Суреттен анық атау немесе бренд тани алмадым.", None, ""
         
     if "ҚАТЕ_МӘТІНІ:" in product_names[0]:
-        return f"❌ <b>Қате:</b> {product_names[0]}", None
+        return f"❌ <b>Қате:</b> {product_names[0]}", None, ""
         
     all_found_items = []
     seen_ids = set()
@@ -194,7 +197,8 @@ def handle_photo(image_bytes, chat_id, username):
         if len(all_found_items) == 1:
             text, markup = format_detail_message(all_found_items[0], confidence='exact')
             final_text = f"👁 Суреттен <b>{product_names[0]}</b> брендін таныдым:\n\n{text}"
-            return final_text, markup
+            # image_url-ді де қайтарамыз — handlers_message.py суретпен жіберу үшін
+            return final_text, markup, all_found_items[0].get("image_url", "")
         else:
             reply_text = f"🔍 Суреттен <b>{product_names[0]}</b> брендін таныдым. Сізге нақты қайсысы керек?\n\n"
             keyboard = []
@@ -208,6 +212,6 @@ def handle_photo(image_bytes, chat_id, username):
                 t_code = "c" if item['type'] == "Мекеме" else "i"
                 keyboard.append([{"text": f"{idx+1}. «{item['title']}»", "callback_data": f"itm:{t_code}:{item['id']}"}])
                 
-            return reply_text, {"inline_keyboard": keyboard}
+            return reply_text, {"inline_keyboard": keyboard}, ""
     else:
-        return f"👁 Суреттен <b>{names_str}</b> брендін таныдым.\n\nБірақ, бұл өнім ҚМДБ халал базасында тіркелмеген немесе сертификаты жоқ.", None
+        return f"👁 Суреттен <b>{names_str}</b> брендін таныдым.\n\nБірақ, бұл өнім ҚМДБ халал базасында тіркелмеген немесе сертификаты жоқ.", None, ""
