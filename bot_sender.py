@@ -54,6 +54,38 @@ def send_message_draft(chat_id, text, draft_id):
         return False
     return True
 
+
+def send_photo_message(chat_id, photo_url, caption, reply_markup=None,
+                       message_effect_id=None, reply_to_message_id=None):
+    """
+    Сурет + мәтін хабары жіберу (мекеме суреті үшін).
+    Сурет жүктелмесе немесе қате болса — тікелей send_message шақырылады.
+    """
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+    payload = {
+        "chat_id": chat_id,
+        "photo": photo_url,
+        "caption": caption,
+        "parse_mode": "HTML"
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+    if message_effect_id:
+        payload["message_effect_id"] = str(message_effect_id)
+    if reply_to_message_id:
+        payload["reply_parameters"] = {"message_id": reply_to_message_id}
+
+    resp = requests.post(url, json=payload).json()
+
+    if resp.get("ok"):
+        return resp["result"]["message_id"]
+
+    # Сурет жүктелмесе — fallback: тікелей мәтін хабары
+    print(f"[send_photo_message] Сурет жүктелмеді, мәтін жіберіледі: {resp.get('description', '')}")
+    return send_message(chat_id, caption, reply_markup=reply_markup,
+                        message_effect_id=message_effect_id,
+                        reply_to_message_id=reply_to_message_id)
+
 def edit_message(chat_id=None, message_id=None, text=None, reply_markup=None, inline_message_id=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText"
     payload = {"text": text, "parse_mode": "HTML"}
