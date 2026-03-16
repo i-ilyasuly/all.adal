@@ -194,6 +194,20 @@ def handle_callback(cb):
             # Алдымен тариф таңдатамыз
             _ask_tariff_for_gift(chat_id, message_id, gift_type)
 
+    elif data.startswith("settings:"):
+        action = data.split(":")[1]
+        answer_callback(cb["id"])
+        if action == "gender":
+            gender_text = (
+                "🔄 <b>Жынысты өзгерту</b>\n\n"
+                "Жынысыңызды таңдаңыз:"
+            )
+            gender_markup = {"inline_keyboard": [[
+                {"text": "🙎‍♂️ Ер азамат", "callback_data": "gender:male"},
+                {"text": "🙎‍♀️ Нәзік жанды", "callback_data": "gender:female"}
+            ]]}
+            edit_message(chat_id, message_id, gender_text, gender_markup)
+
     elif data.startswith("gender:"):
         gender_val = data.split(":")[1]
         gender_kz = "Ер" if gender_val == "male" else "Әйел"
