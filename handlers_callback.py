@@ -21,9 +21,9 @@ def _ask_tariff_for_gift(chat_id, message_id, gift_type, recipient_username=None
     keyboard = []
     for t in TARIFFS:
         if t["discount"] > 0:
-            btn_text = f"{t['emoji']} {t['label']} — {t['stars']} ⭐ (-{t['discount']}%)"
+            btn_text = f"{t['emoji']} {t['label']} — {t['stars']} ⭐ ({t['kzt']} ₸, -{t['discount']}%)"
         else:
-            btn_text = f"{t['emoji']} {t['label']} — {t['stars']} ⭐"
+            btn_text = f"{t['emoji']} {t['label']} — {t['stars']} ⭐ ({t['kzt']} ₸)"
         keyboard.append([{"text": btn_text, "callback_data": f"gift_tariff:{t['id']}:{gift_type}:{r}"}])
     edit_message(chat_id, message_id, text, {"inline_keyboard": keyboard})
 
@@ -223,7 +223,7 @@ def handle_callback(cb):
         edit_message(chat_id, message_id, success_text)
         send_message(chat_id, "Мәзірдегі батырмаларды қолдана аласыз 👇", reply_markup=main_keyboard)
         set_user_gender(user_id, gender_kz)
-        log_to_bigquery(user_id, "set_gender", gender_kz, "Профиль жаңартылды")
+        log_to_bigquery(user_id, "set_gender", gender_kz, "Профиль жаңартылды", gender=gender_kz)
 
     elif data.startswith("srch:"):
         answer_callback(cb["id"])
