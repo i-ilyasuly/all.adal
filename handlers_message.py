@@ -38,6 +38,7 @@ def handle_message(msg):
     
     first_name = msg["chat"].get("first_name", "Досым")
     username = msg["chat"].get("username", "жоқ")
+    language_code = msg.get("from", {}).get("language_code", "")
     is_symbat = (chat_id == SYMBAT_ID)
     
     if "successful_payment" in msg:
@@ -93,7 +94,7 @@ def handle_message(msg):
                 
             save_chat_history(chat_id, "user", "Мен саған бір сурет жібердім")
             save_chat_history(chat_id, "model", result_msg)
-            log_to_bigquery(chat_id, "photo_search", "Сурет", "Тексерілді")
+            log_to_bigquery(chat_id, "photo_search", "Сурет", "Тексерілді", is_premium=(tier in ["premium", "VIP"]))
             increment_usage(chat_id)
 
     elif "location" in msg:
@@ -115,7 +116,7 @@ def handle_message(msg):
         if tier in ["premium", "VIP"] and bot_msg_id:
             set_message_reaction(chat_id, bot_msg_id, "⚡")
             
-        log_to_bigquery(chat_id, "location_search", f"{lat}, {lon}", "Тізім берілді")
+        log_to_bigquery(chat_id, "location_search", f"{lat}, {lon}", "Тізім берілді", is_premium=(tier in ["premium", "VIP"]))
         increment_usage(chat_id)
 
     elif "text" in msg:
@@ -345,7 +346,7 @@ def handle_message(msg):
                         set_message_reaction(chat_id, bot_msg_id, "👨‍💻")
                 save_chat_history(chat_id, "user", text)
                 save_chat_history(chat_id, "model", ai_reply or "")
-                log_to_bigquery(chat_id, "ai_chat", text, "Классификатор: чат")
+                log_to_bigquery(chat_id, "ai_chat", text, "Классификатор: чат", is_premium=(tier in ["premium", "VIP"]), result_count=0)
                 return
 
             found_items = search_data(search_query)
@@ -386,7 +387,7 @@ def handle_message(msg):
                         set_message_reaction(chat_id, bot_msg_id, reaction)
                     save_chat_history(chat_id, "user", text)
                     save_chat_history(chat_id, "model", reply_text)
-                    log_to_bigquery(chat_id, "text_search", text, f"Табылды (1/{confidence})")
+                    log_to_bigquery(chat_id, "text_search", text, f"Табылды (1/{confidence})", is_premium=(tier in ["premium", "VIP"]), result_count=1, confidence=confidence)
                     increment_usage(chat_id)
                 else:
                     # Exact алдымен, fuzzy соңында — ұқсастыққа қарай кезекпен
@@ -409,7 +410,7 @@ def handle_message(msg):
                         set_message_reaction(chat_id, bot_msg_id, "🤔")
                     save_chat_history(chat_id, "user", text)
                     save_chat_history(chat_id, "model", reply_text)
-                    log_to_bigquery(chat_id, "text_search", text, f"Табылды (Көп/{total})")
+                    log_to_bigquery(chat_id, "text_search", text, f"Табылды (Көп/{total})", is_premium=(tier in ["premium", "VIP"]), result_count=total)
                     increment_usage(chat_id)
             else:
                 has_access, tier = check_access(chat_id, is_symbat)
@@ -432,7 +433,7 @@ def handle_message(msg):
                         set_message_reaction(chat_id, bot_msg_id, "👨‍💻")
                 save_chat_history(chat_id, "user", text)    
                 save_chat_history(chat_id, "model", ai_reply or "")
-                log_to_bigquery(chat_id, "ai_chat", text, "Табылмады/AI жауап берді")
+                log_to_bigquery(chat_id, "ai_chat", text, "Табылмады/AI жауап берді", is_premium=(tier in ["premium", "VIP"]), result_count=0)
 
 
 # ── USERNAME ӨҢДЕУШІЛЕРІ ────────────────────────────────────────────────────
