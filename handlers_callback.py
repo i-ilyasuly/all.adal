@@ -1,4 +1,4 @@
-from bot_sender import send_message, edit_message, edit_reply_markup, answer_callback, set_message_reaction, send_gift_invoice
+from bot_sender import send_message, send_photo_message, edit_message, edit_reply_markup, answer_callback, set_message_reaction, send_gift_invoice
 from db_core import set_user_gender, log_to_bigquery, get_item_by_id, check_access
 from search_logic import get_nearby_companies
 from formatters import format_detail_message
@@ -237,7 +237,12 @@ def handle_callback(cb):
                 elif "Мерзімі" in status_text or "⚠️" in status_text or "🚫" in status_text or "Қайтарып" in status_text:
                     effect = EFFECT_EXPIRED
                     reaction = "👎"
-            bot_msg_id = send_message(chat_id, text, reply_markup=markup, message_effect_id=effect)
+            image_url = item.get("image_url", "")
+            if image_url:
+                bot_msg_id = send_photo_message(chat_id, image_url, text,
+                                                reply_markup=markup, message_effect_id=effect)
+            else:
+                bot_msg_id = send_message(chat_id, text, reply_markup=markup, message_effect_id=effect)
             if reaction and bot_msg_id:
                 set_message_reaction(chat_id, bot_msg_id, reaction)
         else:
