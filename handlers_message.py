@@ -109,11 +109,8 @@ def handle_message(msg):
         lat, lon = msg["location"]["latitude"], msg["location"]["longitude"]
         text, markup = get_nearby_companies(lat, lon, page=1)
 
-        bot_msg_id = send_message(chat_id, text, reply_markup=markup)
-
-        # Локация хабарын өшіреміз — чат таза болсын, карта превью қалмасын
-        from bot_sender import delete_message
-        delete_message(chat_id, user_msg_id)
+        effect = EFFECT_HALAL if tier in ["premium", "VIP"] else None
+        bot_msg_id = send_message(chat_id, text, reply_markup=markup, message_effect_id=effect)
         
         if tier in ["premium", "VIP"] and bot_msg_id:
             set_message_reaction(chat_id, bot_msg_id, "⚡")
@@ -364,34 +361,27 @@ def handle_message(msg):
                     log_to_bigquery(chat_id, "text_search", text, f"Табылды (1/{confidence})")
                     increment_usage(chat_id)
                 else:
-                    # Exact және fuzzy нәтижелерді бөліп көрсетеміз
-                    exact_items = [i for i in found_items[:5] if i.get('confidence') == 'exact']
-                    fuzzy_items = [i for i in found_items[:5] if i.get('confidence') == 'fuzzy']
+                    # Exact алдымен, fuzzy соңында — ұқсастыққа қарай кезекпен
+                    exact_items = [i for i in found_items if i.get('confidence') == 'exact']
+                    fuzzy_items = [i for i in found_items if i.get('confidence') == 'fuzzy']
+                    all_items = exact_items + fuzzy_items
 
-                    reply_text = f"🔍 <b>Мен бірнеше нұсқа таптым. Сізге нақты қайсысы керек?</b>\n\n"
-                    keyboard = []
-                    display_items = exact_items + fuzzy_items
+                    total = len(all_items)
+                    per_page = 5
+                    page = 1
 
-                    for idx, item in enumerate(display_items):
-                        confidence = item.get('confidence', 'exact')
-                        prefix = "❓ " if confidence == 'fuzzy' else ""
-                        if item['type'] == 'Мекеме':
-                            desc_text = f"📍 {item.get('address', '')}"
-                        else:
-                            desc_text = f"🏷 {item.get('desc', '')}"
-                        reply_text += f"<b>{idx+1}. {prefix}«{item['title']}»</b>\n{desc_text}\n"
-                        if confidence == 'fuzzy':
-                            reply_text += f"<i>⚠️ Іздеген атауыңызға ұқсас, бірақ нақты сәйкес емес</i>\n"
-                        reply_text += "\n"
-                        t_code = "c" if item['type'] == "Мекеме" else "i"
-                        keyboard.append([{"text": f"{idx+1}. {prefix}«{item['title']}»", "callback_data": f"itm:{t_code}:{item['id']}"}])
+                    # Нәтижелерді Firestore-да сақтаймыз — пагинация үшін
+                    from db_core import save_search_session
+                    session_id = save_search_session(chat_id, all_items)
+
+                    reply_text, keyboard = _build_search_results_page(all_items, page, per_page, session_id=session_id)
 
                     bot_msg_id = send_message(chat_id, reply_text, reply_markup={"inline_keyboard": keyboard}, reply_to_message_id=user_msg_id)
                     if tier in ["premium", "VIP"] and bot_msg_id:
                         set_message_reaction(chat_id, bot_msg_id, "🤔")
                     save_chat_history(chat_id, "user", text)
                     save_chat_history(chat_id, "model", reply_text)
-                    log_to_bigquery(chat_id, "text_search", text, "Табылды (Көп)")
+                    log_to_bigquery(chat_id, "text_search", text, f"Табылды (Көп/{total})")
                     increment_usage(chat_id)
             else:
                 has_access, tier = check_access(chat_id, is_symbat)
@@ -501,3 +491,46 @@ def _handle_username_confirm(chat_id, user_msg_id, text):
             f"⏳ Жоғарыдағы батырмалар арқылы <b>@{pending}</b> юзернеймін растаңыз немесе өзгертіңіз.",
             reply_to_message_id=user_msg_id
         )
+
+
+# ── ІЗДЕУ НӘТИЖЕЛЕРІ ПАГИНАЦИЯСЫ ───────────────────────────────────────────
+
+def _build_search_results_page(all_items, page, per_page, session_id=None, query_text=""):
+    """Іздеу нәтижелерін беттеп шығару — барлық нәтижелер, келесі/артқа батырмалары"""
+    import math
+    total = len(all_items)
+    total_pages = math.ceil(total / per_page)
+    if page > total_pages: page = total_pages
+    if page < 1: page = 1
+
+    start = (page - 1) * per_page
+    items = all_items[start:start + per_page]
+
+    reply_text = f"🔍 <b>Табылған нұсқалар:</b> {total} дана\n📄 {page}/{total_pages} бет\n\n"
+    keyboard = []
+
+    for idx, item in enumerate(items, start=start + 1):
+        confidence = item.get('confidence', 'exact')
+        prefix = "❓ " if confidence == 'fuzzy' else ""
+        if item['type'] == 'Мекеме':
+            desc_text = f"📍 {item.get('address', '')}"
+        else:
+            desc_text = f"🏷 {item.get('desc', '')}"
+        reply_text += f"<b>{idx}. {prefix}«{item['title']}»</b>\n{desc_text}\n"
+        if confidence == 'fuzzy':
+            reply_text += f"<i>⚠️ Ұқсас, бірақ нақты сәйкес емес</i>\n"
+        reply_text += "\n"
+        t_code = "c" if item['type'] == "Мекеме" else "i"
+        keyboard.append([{"text": f"{idx}. {prefix}«{item['title']}»", "callback_data": f"itm:{t_code}:{item['id']}"}])
+
+    # Навигация батырмалары — session_id арқылы (64 байт лимитіне сәйкес)
+    if session_id:
+        nav = []
+        if page > 1:
+            nav.append({"text": "⬅️ Артқа", "callback_data": f"srch:{page-1}:{session_id}"})
+        if page < total_pages:
+            nav.append({"text": "Келесі ➡️", "callback_data": f"srch:{page+1}:{session_id}"})
+        if nav:
+            keyboard.append(nav)
+
+    return reply_text, keyboard
