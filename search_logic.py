@@ -101,8 +101,12 @@ def get_nearby_companies(user_lat, user_lon, page=1):
     return text, {"inline_keyboard": inline_keyboard}
 
 def search_e_code(query_text):
-    match = re.search(r'[eе]\s*[-_]?\s*\d{2,4}[a-zа-я]?', query_text.lower())
-    if match: return clean_text(match.group(0))
+    # Кирилица Е/е → латын E/e алмастыру (Е120 → E120)
+    normalized = query_text.replace('Е', 'E').replace('е', 'e')
+    match = re.search(r'[eE]\s*[-_]?\s*\d{2,4}[a-zA-Z]?', normalized)
+    if match:
+        raw = match.group(0)
+        return 'e' + re.sub(r'[^0-9a-zA-Z]', '', raw[1:]).lower()
     return None
 
 def _is_match(query_text, title):
@@ -181,18 +185,18 @@ def search_data(query_text):
     # ── E-КОД іздеу ───────────────────────────────────────────────────────
     e_code = search_e_code(query_text)
     if e_code:
-        e_variants = get_variants(e_code)
+        # e_code әрқашан латын e — базада кирилица болуы мүмкін, нормализациялаймыз
+        e_normalized = e_code.replace('е', 'e')
         for i in CACHE["ingredients"]:
             title = i.get("title", "")
             name = i.get("name", "")
-            t_clean, n_clean = clean_text(title), clean_text(name)
-            for e_var in e_variants:
-                e_clean = clean_text(e_var)
-                if (e_clean in t_clean and len(e_clean) > 2) or (e_clean in n_clean and len(e_clean) > 2):
-                    item = format_item_dict(i, "Қоспа")
-                    item['confidence'] = 'exact'
-                    results.append(item)
-                    break
+            # title/name ішінде e_code бар ма — substring тексеру
+            t_norm = clean_text(title).replace('е', 'e')
+            n_norm = clean_text(name).replace('е', 'e')
+            if (e_normalized in t_norm and len(e_normalized) > 2) or                (e_normalized in n_norm and len(e_normalized) > 2):
+                item = format_item_dict(i, "Қоспа")
+                item['confidence'] = 'exact'
+                results.append(item)
         if results:
             return results
 
