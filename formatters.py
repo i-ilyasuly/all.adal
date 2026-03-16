@@ -10,6 +10,12 @@ def format_item_dict(data, type_name):
         elif cert_status == "revoked": st = "🚫 Қайтарып алынған"
         else: st = f"⚠️ {cert_status}"
 
+        # Мекеме суреті — featured_image.thumbnail өрісінен
+        image_url = ""
+        fi = data.get("featured_image")
+        if isinstance(fi, dict):
+            image_url = fi.get("thumbnail", "") or fi.get("full", "") or ""
+
         return {
             "id": str(data.get("id", uuid.uuid4().hex[:8])),
             "type": "Мекеме",
@@ -19,7 +25,8 @@ def format_item_dict(data, type_name):
             "map_link": data.get("map_link", ""),
             "date_start": d_start,
             "date_end": d_end,
-            "status": st
+            "status": st,
+            "image_url": image_url
         }
     else:
         st = "✅ Рұқсат етілген" if data.get("status", {}).get("name") == "Халяль" else "🚫 Күдікті"
