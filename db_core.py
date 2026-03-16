@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from formatters import format_item_dict
 import string
 import random
+import uuid
 
 db = firestore.Client()
 bq_client = bigquery.Client()
@@ -226,3 +227,21 @@ def redeem_gift_code(code, user_id):
             return True, data.get("buyer_name", "Жасырын адам"), t["days"]
             
     return False, None, 0
+
+def save_search_session(user_id, items):
+    """Іздеу нәтижелерін уақытша сақтау (пагинация үшін)"""
+    session_id = uuid.uuid4().hex[:12]
+    data = [{"t": i.get('type', ''), "id": i['id'], "c": i.get('confidence', 'exact')} for i in items]
+    db.collection("search_sessions").document(session_id).set({
+        "user_id": str(user_id),
+        "items": data,
+        "created_at": firestore.SERVER_TIMESTAMP
+    })
+    return session_id
+
+def get_search_session(session_id):
+    """Сақталған іздеу нәтижелерін алу"""
+    doc = db.collection("search_sessions").document(session_id).get()
+    if doc.exists:
+        return doc.to_dict().get("items", [])
+    return []
