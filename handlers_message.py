@@ -1,5 +1,6 @@
 import re
 import random
+import requests as _requests
 from bot_sender import send_message, send_photo_message, edit_message, send_chat_action, download_photo, set_message_reaction, send_invoice, send_gift_invoice
 from db_core import (add_user, save_chat_history, log_to_bigquery, check_access, 
                      increment_usage, revoke_premium, get_user_gender, redeem_gift_code,
@@ -13,6 +14,24 @@ from gift_state import (set_awaiting_username, is_awaiting_username,
                         set_confirm_username, get_pending_username, clear_state)
 
 SYMBAT_ID = 1042456426
+
+def _get_city(lat, lon):
+    """Google Geocoding API арқылы қала атауын анықтайды"""
+    try:
+        from config import GEOCODING_API_KEY
+        url = "https://maps.googleapis.com/maps/api/geocode/json"
+        params = {"latlng": f"{lat},{lon}", "key": GEOCODING_API_KEY, "language": "ru"}
+        resp = _requests.get(url, params=params, timeout=5).json()
+        if resp.get("status") == "OK":
+            for result in resp["results"]:
+                for component in result["address_components"]:
+                    if "locality" in component["types"]:
+                        return component["long_name"]
+                    if "administrative_area_level_1" in component["types"]:
+                        return component["long_name"]
+    except Exception as e:
+        print(f"[_get_city] Қате: {e}")
+    return None
 EFFECT_HALAL = "5046509860389126442"
 EFFECT_EXPIRED = "5104858069142078462"
 
@@ -53,6 +72,7 @@ def handle_message(msg):
     if "photo" in msg:
         has_access, tier = check_access(chat_id, is_symbat)
         if not has_access:
+            log_to_bigquery(chat_id, "limit_hit", "photo_search", "Лимит бітті")
             send_message(chat_id, tier, reply_markup=get_premium_keyboard(), reply_to_message_id=user_msg_id)
             return
         
@@ -100,6 +120,7 @@ def handle_message(msg):
     elif "location" in msg:
         has_access, tier = check_access(chat_id, is_symbat)
         if not has_access:
+            log_to_bigquery(chat_id, "limit_hit", "location_search", "Лимит бітті")
             send_message(chat_id, tier, reply_markup=get_premium_keyboard(), reply_to_message_id=user_msg_id)
             return
         
@@ -116,7 +137,9 @@ def handle_message(msg):
         if tier in ["premium", "VIP"] and bot_msg_id:
             set_message_reaction(chat_id, bot_msg_id, "⚡")
             
-        log_to_bigquery(chat_id, "location_search", f"{lat}, {lon}", "Тізім берілді", is_premium=(tier in ["premium", "VIP"]))
+        city = _get_city(lat, lon)
+        log_to_bigquery(chat_id, "location_search", f"{lat}, {lon}", "Тізім берілді",
+                        is_premium=(tier in ["premium", "VIP"]), platform=city)
         increment_usage(chat_id)
 
     elif "text" in msg:
@@ -354,6 +377,7 @@ def handle_message(msg):
             if found_items:
                 has_access, tier = check_access(chat_id, is_symbat)
                 if not has_access:
+                    log_to_bigquery(chat_id, "limit_hit", "text_search", "Лимит бітті")
                     send_message(chat_id, tier, reply_markup=get_premium_keyboard(), reply_to_message_id=user_msg_id)
                     return
                     
