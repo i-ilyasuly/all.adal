@@ -142,7 +142,7 @@ def chat_with_ai(user_id, text, is_symbat, chat_id=None, message_id=None):
         return "Кешіріңіз, жүйеде шағын іркіліс болды. Сұрағыңызды немесе суретті қайта жібересіз бе? 🔄"
 
 def process_image_with_ai(image_bytes):
-    model = genai.GenerativeModel('gemini-3.1-flash-lite-preview') 
+    model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
     image_parts = [{"mime_type": "image/jpeg", "data": image_bytes}]
     
     prompt = """
@@ -196,11 +196,11 @@ def handle_photo(image_bytes, chat_id, username):
     if all_found_items:
         if len(all_found_items) == 1:
             text, markup = format_detail_message(all_found_items[0], confidence='exact')
-            final_text = f"👁 Суреттен <b>{product_names[0]}</b> брендін таныдым:\n\n{text}"
+            final_text = f"👁 Суреттен <b>{product_names[0]}</b> өнімін/мекемесін таныдым:\n\n{text}"
             # image_url-ді де қайтарамыз — handlers_message.py суретпен жіберу үшін
             return final_text, markup, all_found_items[0].get("image_url", "")
         else:
-            reply_text = f"🔍 Суреттен <b>{product_names[0]}</b> брендін таныдым. Сізге нақты қайсысы керек?\n\n"
+            reply_text = f"🔍 Суреттен <b>{product_names[0]}</b> өнімін/мекемесін таныдым. Сізге нақты қайсысы керек?\n\n"
             keyboard = []
             for idx, item in enumerate(all_found_items[:5]):
                 if item['type'] == 'Мекеме':
@@ -214,4 +214,4 @@ def handle_photo(image_bytes, chat_id, username):
                 
             return reply_text, {"inline_keyboard": keyboard}, ""
     else:
-        return f"👁 Суреттен <b>{names_str}</b> брендін таныдым.\n\nБірақ, бұл өнім ҚМДБ халал базасында тіркелмеген немесе сертификаты жоқ.", None, ""
+        return f"👁 Суреттен <b>{names_str}</b> өнімін/мекемесін таныдым.\n\nБірақ бұл өнім ҚМДБ Халал Даму базасында тіркелмеген.", None, ""
