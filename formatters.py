@@ -1,4 +1,16 @@
 import uuid
+import re
+
+def strip_html(text):
+    """HTML тегтерді жойып, таза мәтін қайтарады"""
+    if not text:
+        return ""
+    # <p>, <br>, <div> т.б. тегтерді бос орынға алмастырамыз
+    text = re.sub(r'<br\s*/?>', ' ', text)
+    text = re.sub(r'<p[^>]*>', '', text)
+    text = re.sub(r'</p>', ' ', text)
+    text = re.sub(r'<[^>]+>', '', text)
+    return text.strip()
 
 def format_item_dict(data, type_name):
     if type_name == "Мекеме":
@@ -36,7 +48,7 @@ def format_item_dict(data, type_name):
             "type": "Қоспа",
             "title": item_title,
             "desc": data.get("name", ""),
-            "info": data.get("desc", ""),
+            "info": strip_html(data.get("desc", "")),
             "status": st
         }
 
@@ -112,7 +124,7 @@ def format_detail_message(item, confidence='exact', query_text=''):
         msg += f"📊 <b>Статус:</b> {item['status']}"
 
         if item.get('info'):
-            msg += f"\n\n📝 <b>Ақпарат:</b> {item['info']}"
+            msg += f"\n\n📝 <b>Ақпарат:</b> {strip_html(item['info'])}"
 
         keys = []
         t_code = "i"
