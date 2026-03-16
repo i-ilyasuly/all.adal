@@ -15,7 +15,7 @@ def _now():
 
 def log_to_bigquery(user_id, action, query_text, status,
                     is_premium=None, result_count=None,
-                    confidence=None, stars_spent=None, platform=None):
+                    confidence=None, stars_spent=None, platform=None, gender=None):
     try:
         table_id = f"{bq_client.project}.bot_statistics.usage_logs"
         row = {
@@ -35,6 +35,8 @@ def log_to_bigquery(user_id, action, query_text, status,
             row["stars_spent"] = stars_spent
         if platform is not None:
             row["platform"] = platform
+        if gender is not None:
+            row["gender"] = gender
 
         errors = bq_client.insert_rows_json(table_id, [row])
         if errors:
