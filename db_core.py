@@ -13,17 +13,30 @@ def _now():
     """Барлық жерде бір timezone: UTC. Бұл функцияны пайдалан."""
     return datetime.now(timezone.utc)
 
-def log_to_bigquery(user_id, action, query_text, status):
+def log_to_bigquery(user_id, action, query_text, status,
+                    is_premium=None, result_count=None,
+                    confidence=None, stars_spent=None, platform=None):
     try:
         table_id = f"{bq_client.project}.bot_statistics.usage_logs"
-        rows_to_insert = [{
+        row = {
             "created_at": _now().isoformat(),
             "user_id": str(user_id),
             "action": action,
-            "query": query_text[:200],
-            "status": status
-        }]
-        errors = bq_client.insert_rows_json(table_id, rows_to_insert)
+            "query": query_text[:200] if query_text else "",
+            "status": status,
+        }
+        if is_premium is not None:
+            row["is_premium"] = is_premium
+        if result_count is not None:
+            row["result_count"] = result_count
+        if confidence is not None:
+            row["confidence"] = confidence
+        if stars_spent is not None:
+            row["stars_spent"] = stars_spent
+        if platform is not None:
+            row["platform"] = platform
+
+        errors = bq_client.insert_rows_json(table_id, [row])
         if errors:
             print(f"BigQuery қатесі: {errors}")
     except Exception as e:
