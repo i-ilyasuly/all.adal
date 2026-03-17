@@ -1,11 +1,11 @@
 import uuid
 import re
+from translations import t
 
 def strip_html(text):
     """HTML тегтерді жойып, таза мәтін қайтарады"""
     if not text:
         return ""
-    # <p>, <br>, <div> т.б. тегтерді бос орынға алмастырамыз
     text = re.sub(r'<br\s*/?>', ' ', text)
     text = re.sub(r'<p[^>]*>', '', text)
     text = re.sub(r'</p>', ' ', text)
@@ -22,7 +22,6 @@ def format_item_dict(data, type_name):
         elif cert_status == "revoked": st = "🚫 Қайтарып алынған"
         else: st = f"⚠️ {cert_status}"
 
-        # Мекеме суреті — featured_image.thumbnail өрісінен
         image_url = ""
         fi = data.get("featured_image")
         if isinstance(fi, dict):
@@ -52,84 +51,68 @@ def format_item_dict(data, type_name):
             "status": st
         }
 
-def format_detail_message(item, confidence='exact', query_text=''):
+def format_detail_message(item, confidence='exact', query_text='', lang='kz'):
     """
     confidence='exact'  → қалыпты хабар
     confidence='fuzzy'  → үстіне ескерту қосылады
+    lang='kz' | 'ru'   → хабар тілі
     """
     clean_title = str(item['title']).strip('«»"\' ')
 
-    # ── FUZZY ЕСКЕРТУІ ──────────────────────────────────────────────────────
+    # FUZZY ЕСКЕРТУІ
     fuzzy_warning = ""
     if confidence == 'fuzzy':
-        fuzzy_warning = (
-            f"⚠️ <b>Назар аударыңыз!</b>\n"
-            f"Сіз <b>«{query_text}»</b> деп іздедіңіз, бірақ базадан <b>«{clean_title}»</b> табылды — бұл ұқсас, бірақ басқа өнім болуы мүмкін.\n"
-            f"Атауын нақтырақ жазып қайта көріңіз немесе суретін жіберіңіз.\n\n"
-            f"<i>Төменде табылған ұқсас нәтиже:</i>\n\n"
-        )
+        fuzzy_warning = t('fuzzy_warning', lang, query=query_text, title=clean_title)
 
     if item['type'] == 'Мекеме':
-        # Мерзімі өткен мекемеге қатаң ескерту
         if "Белсенді" in item['status']:
-            msg = f"{fuzzy_warning}✅ <b>«{clean_title}»</b> — ҚМДБ Халал Даму базасында ресми тіркелген.\n\n"
+            msg = fuzzy_warning + t('result_active', lang, title=clean_title)
         elif "аяқталған" in item['status'] or "Мерзімі" in item['status']:
-            msg = (
-                f"{fuzzy_warning}"
-                f"🚫 <b>НАЗАР АУДАРЫҢЫЗ!</b>\n\n"
-                f"<b>«{clean_title}»</b> мекемесінің халал сертификаты <b>МЕРЗІМІ ӨТІП КЕТКЕН!</b>\n\n"
-                f"Бұл мекеменің қазіргі уақытта жарамды халал сертификаты жоқ. "
-                f"Барар алдында мекемеден тікелей сертификаттың жаңартылғанын сұраңыз.\n\n"
-            )
+            msg = fuzzy_warning + t('result_expired', lang, title=clean_title)
         elif "Қайтарып" in item['status'] or "Жойылған" in item['status']:
-            msg = (
-                f"{fuzzy_warning}"
-                f"🚫 <b>НАЗАР АУДАРЫҢЫЗ!</b>\n\n"
-                f"<b>«{clean_title}»</b> мекемесінің халал сертификаты <b>ЖОЙЫЛҒАН!</b>\n\n"
-                f"Бұл мекеменің халал сертификаты ҚМДБ Халал Даму тарапынан ресми түрде жойылған.\n\n"
-            )
+            msg = fuzzy_warning + t('result_revoked', lang, title=clean_title)
         else:
-            msg = f"{fuzzy_warning}⚠️ <b>«{clean_title}»</b> — сертификат мәртебесі белгісіз.\n\n"
+            msg = fuzzy_warning + t('result_unknown', lang, title=clean_title)
 
         if item['desc'] and item['desc'] != "Белгісіз":
-            msg += f"🏢 <b>Өндіруші:</b> {item['desc']}\n"
-        msg += f"📊 <b>Статус:</b> {item['status']}\n"
+            msg += t('result_manufacturer', lang, desc=item['desc'])
+        msg += t('result_status', lang, status=item['status'])
 
         d_start = item.get('date_start')
         d_end = item.get('date_end')
         if d_start and d_end:
-            msg += f"📅 <b>Жарамдылығы:</b> {d_start} - {d_end}\n"
+            msg += t('result_validity', lang, dates=f"{d_start} - {d_end}")
         elif d_end:
-            msg += f"📅 <b>Жарамдылығы:</b> {d_end} дейін\n"
+            suffix = "дейін" if lang == 'kz' else f"до {d_end}"
+            msg += t('result_validity', lang, dates=f"{d_end} {suffix}" if lang == 'kz' else d_end)
 
-        # Мерзімі өткенде карта батырмасын жасырамыз — адам бармас үшін
         keys = []
         if item.get('map_link') and "Белсенді" in item['status']:
-            keys.append([{"text": "🗺️ Картадан көру", "url": item['map_link']}])
+            keys.append([{"text": t('btn_map', lang), "url": item['map_link'], "style": "primary"}])
 
         t_code = "c"
         keys.append([
-            {"text": "👍 Пайдалы", "callback_data": f"fb:good:itm:{t_code}:{item['id']}"},
-            {"text": "👎 Қате", "callback_data": f"fb:bad:itm:{t_code}:{item['id']}"}
+            {"text": t('btn_good', lang), "callback_data": f"fb:good:itm:{t_code}:{item['id']}", "style": "success"},
+            {"text": t('btn_bad', lang), "callback_data": f"fb:bad:itm:{t_code}:{item['id']}", "style": "danger"}
         ])
         return msg, {"inline_keyboard": keys}
 
     else:
         if "Рұқсат" in item['status']:
-            msg = f"{fuzzy_warning}✅ <b>«{clean_title}»</b> — рұқсат етілген (халал) қоспа.\n\n"
+            msg = fuzzy_warning + t('result_ingredient_halal', lang, title=clean_title)
         else:
-            msg = f"{fuzzy_warning}🚫 <b>Назар аударыңыз:</b> <b>«{clean_title}»</b> қоспасы күдікті!\n\n"
+            msg = fuzzy_warning + t('result_ingredient_haram', lang, title=clean_title)
 
-        msg += f"🏷 <b>Ғылыми атауы:</b> {item['desc']}\n"
-        msg += f"📊 <b>Статус:</b> {item['status']}"
+        msg += t('result_scientific_name', lang, desc=item['desc'])
+        msg += t('result_status', lang, status=item['status'])
 
         if item.get('info'):
-            msg += f"\n\n📝 <b>Ақпарат:</b> {strip_html(item['info'])}"
+            msg += t('result_info', lang, info=strip_html(item['info']))
 
         keys = []
         t_code = "i"
         keys.append([
-            {"text": "👍 Пайдалы", "callback_data": f"fb:good:itm:{t_code}:{item['id']}"},
-            {"text": "👎 Қате", "callback_data": f"fb:bad:itm:{t_code}:{item['id']}"}
+            {"text": t('btn_good', lang), "callback_data": f"fb:good:itm:{t_code}:{item['id']}", "style": "success"},
+            {"text": t('btn_bad', lang), "callback_data": f"fb:bad:itm:{t_code}:{item['id']}", "style": "danger"}
         ])
         return msg, {"inline_keyboard": keys}
