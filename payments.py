@@ -3,9 +3,10 @@ from bot_sender import send_message, send_invoice, answer_pre_checkout_query, se
 from db_core import grant_premium, record_payment, log_to_bigquery, create_gift_code
 from config import BOT_TOKEN
 
-def get_premium_keyboard():
+def get_premium_keyboard(lang='kz'):
+    from translations import t
     return {
-        "inline_keyboard": [[{"text": "⭐️ Premium алу (100 ⭐️)", "callback_data": "buy_premium"}]]
+        "inline_keyboard": [[{"text": t("btn_premium_buy_inline", lang), "callback_data": "buy_premium", "style": "success"}]]
     }
 
 def handle_buy_premium_callback(chat_id, callback_id):
@@ -26,6 +27,9 @@ def get_telegram_user_id_by_username(username):
 def process_successful_payment(message):
     chat_id = message["chat"]["id"]
     username = message["chat"].get("username", message["chat"].get("first_name", "Жақсы адам"))
+    from db_core import get_user_language
+    from translations import t
+    lang = get_user_language(chat_id)
     payment_info = message["successful_payment"]
 
     amount = payment_info["total_amount"]
@@ -54,17 +58,7 @@ def process_successful_payment(message):
     own_tariff = get_tariff_by_id(payload)
     if own_tariff:
         grant_premium(chat_id, days=own_tariff["days"])
-        success_text = (
-            f"🎉 Төлем сәтті өтті! Құттықтаймыз!\n\n"
-            f"Енді сіз — Premium қолданушысыз 👑\n"
-            f"Алдағы <b>{own_tariff['label']}</b> бойы сізге мыналар қолжетімді:\n\n"
-            "✅ Шексіз іздеу — күніне қанша іздесеңіз де\n"
-            "📸 Суретпен тану — өнімнің суретін жіберіп тексеріңіз\n"
-            "📍 Жақын маңдағы халал мекемелер — орныңызды жіберіп бірден табыңыз\n"
-            "🗺 Картадан көру батырмасы — мекемеге бірден жол салыңыз\n"
-            "⚡ Реакция мен эффектілер — сұрауыңызға жылдам жауап\n\n"
-            "Жобамызды қолдағаныңыз үшін рақмет! ❤️"
-        )
+        success_text = t("payment_success_own", lang, label=own_tariff["label"])
         send_message(chat_id, success_text, message_effect_id="5046509860389126442")
 
     # 2. СІЛТЕМЕ АРҚЫЛЫ СЫЙЛЫҚ (кез келген тариф)
@@ -73,17 +67,11 @@ def process_successful_payment(message):
         tariff_id = parts[0].lstrip("gift_")  # premium_30_days т.б.
         buyer_name = parts[1] or username
         from tariffs import get_tariff_by_id
-        t = get_tariff_by_id(tariff_id) or {"label": "30 күн", "days": 30}
+        t_info = get_tariff_by_id(tariff_id) or {"label": "30 күн", "days": 30}
         code = create_gift_code(chat_id, buyer_name, tariff_id=tariff_id)
         bot_username = "alladalbot"
         gift_link = f"https://t.me/{bot_username}?start={code}"
-        success_text = (
-            f"🎁 <b>Сыйлық сәтті сатып алынды!</b>\n\n"
-            f"Мерзімі: <b>{t['label']}</b>\n"
-            "Төмендегі сілтемені досыңызға жіберіңіз:\n\n"
-            f"👉 {gift_link}\n\n"
-            "<i>Ескерту: Бұл сілтемені тек 1 адам ғана қолдана алады!</i>"
-        )
+        success_text = t("payment_gift_link", lang, label=t_info["label"], link=gift_link)
         send_message(chat_id, success_text, message_effect_id="5046509860389126442")
 
     # 3. ТЕЛЕГРАМ ИНЛАЙН АРҚЫЛЫ СЫЙЛЫҚ (кез келген тариф)
@@ -92,17 +80,12 @@ def process_successful_payment(message):
         tariff_id = parts[0].lstrip("gift_")
         buyer_name = parts[1] or username
         from tariffs import get_tariff_by_id
-        t = get_tariff_by_id(tariff_id) or {"label": "30 күн", "days": 30}
+        t_info = get_tariff_by_id(tariff_id) or {"label": "30 күн", "days": 30}
         code = create_gift_code(chat_id, buyer_name, tariff_id=tariff_id)
-        success_text = (
-            f"🎁 <b>Сыйлық сәтті сатып алынды!</b>\n\n"
-            f"Мерзімі: <b>{t['label']}</b>\n"
-            "Төмендегі батырманы басып, досыңызды таңдаңыз!\n\n"
-            "<i>Ескерту: Бұл сыйлықты тек 1 адам ғана аша алады!</i>"
-        )
+        success_text = t("payment_gift_inline", lang, label=t_info["label"])
         gift_markup = {
             "inline_keyboard": [[
-                {"text": "🎁 Сыйлықты жіберу", "switch_inline_query": f"giftbox_{code}"}
+                {"text": t("payment_btn_send_gift", lang), "switch_inline_query": f"giftbox_{code}", "style": "success"}
             ]]
         }
         send_message(chat_id, success_text, reply_markup=gift_markup, message_effect_id="5046509860389126442")
@@ -117,7 +100,7 @@ def process_successful_payment(message):
         recipient_username = rest_parts[0]
         buyer_name = rest_parts[1] if len(rest_parts) > 1 else username
         from tariffs import get_tariff_by_id
-        t = get_tariff_by_id(tariff_id) or {"label": "30 күн", "days": 30}
+        t_info = get_tariff_by_id(tariff_id) or {"label": "30 күн", "days": 30}
         if not buyer_name:
             buyer_name = username
 
@@ -128,15 +111,12 @@ def process_successful_payment(message):
         if recipient_id:
             code = create_gift_code(chat_id, buyer_name, recipient_username=recipient_username, tariff_id=tariff_id)
             gift_link = f"https://t.me/{bot_username}?start={code}"
-            recipient_text = (
-                f"🎁 <b>Сізге сыйлық келді!</b>\n\n"
-                f"<b>{buyer_name}</b> сізге <b>{t['label']} Premium</b> сыйлады!\n\n"
-                f"Сыйлықты қабылдау үшін төмендегі батырманы басыңыз 👇\n\n"
-                f"<i>Батырманы басқан сәтте Premium {t['label']}ге автоматты іске қосылады.</i>"
-            )
+            from db_core import get_user_language as _get_lang
+            recipient_lang = _get_lang(recipient_id)
+            recipient_text = t("recipient_gift_text", recipient_lang, buyer=buyer_name, label=t_info["label"])
             recipient_markup = {
                 "inline_keyboard": [[
-                    {"text": "🎁 Сыйлықты қабылдау", "url": gift_link}
+                    {"text": t("btn_accept_gift", recipient_lang), "url": gift_link, "style": "success"}
                 ]]
             }
             result = send_message(recipient_id, recipient_text, reply_markup=recipient_markup, message_effect_id="5046509860389126442")
@@ -146,19 +126,7 @@ def process_successful_payment(message):
             gift_link = f"https://t.me/{bot_username}?start={code}"
 
         if direct_sent:
-            success_text = (
-                f"🎁 <b>Сыйлық сәтті жіберілді!</b>\n\n"
-                f"<b>@{recipient_username}</b> пайдаланушысына хабар жетті.\n"
-                f"Ол батырманы басқан сәтте Premium автоматты іске қосылады.\n\n"
-                f"<i>Запасқа сілтеме:</i>\n👉 {gift_link}\n\n"
-                f"<i>Бұл сілтемені тек 1 адам ғана қолдана алады!</i>"
-            )
+            success_text = t("payment_gift_sent_direct", lang, recipient=recipient_username, link=gift_link)
         else:
-            success_text = (
-                f"🎁 <b>Сыйлық сәтті сатып алынды!</b>\n\n"
-                f"<b>@{recipient_username}</b> ботқа бұрын жазбағандықтан хабар тікелей жете алмады.\n\n"
-                f"📎 Сілтемені досыңызға жіберіңіз:\n👉 {gift_link}\n\n"
-                f"⭐️ <b>Маңызды:</b> Досыңыз сілтемені басқан сәтте Premium <b>автоматты {t['label']}ге іске қосылады!</b>\n\n"
-                f"<i>Бұл сілтемені тек 1 адам ғана қолдана алады!</i>"
-            )
+            success_text = t("payment_gift_no_direct", lang, recipient=recipient_username, link=gift_link, label=t_info["label"])
         send_message(chat_id, success_text, message_effect_id="5046509860389126442")
