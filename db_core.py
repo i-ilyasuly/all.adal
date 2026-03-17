@@ -107,7 +107,7 @@ def check_access(user_id, is_symbat):
                 prem_until = prem_until.replace(tzinfo=timezone.utc)
             if prem_until > _now():
                 if data.get("last_search_date") == today_str and data.get("daily_searches", 0) >= 150:
-                    return False, "Спам қорғанысы: Сіз күндік 150 сұрау шегіне жеттіңіз."
+                    return False, "SPAM_LIMIT"
                 return True, "premium"
                 
     last_date = data.get("last_search_date")
@@ -117,7 +117,7 @@ def check_access(user_id, is_symbat):
         usage = 0 
         
     if usage >= 5:
-        return False, ("⚠️ <b>Күндік 5 сұрау лимитіңіз аяқталды.</b>\n\n""⭐️ <b>Premium алсаңыз:</b>\n""✅ Шексіз іздеу — күніне қанша іздесеңіз де\n""📸 Суретпен тану — өнімнің суретін жіберіп тексеріңіз\n""📍 Жақын маңдағы халал мекемелер — орныңызды жіберіп бірден табыңыз\n""🗺 Картадан көру батырмасы — мекемеге бірден жол салыңыз\n""⚡ Жылдам жауап — Premium қолданушыларға басымдық\n\n""Тегін нұсқада: күніне 5 сұрау\n""Premium-да: шексіз + барлық мүмкіндіктер\n\n""👇 Төменде тарифті таңдаңыз:")
+        return False, "LIMIT"
         
     return True, "free"
 
@@ -185,6 +185,17 @@ def get_user_gender(user_id):
 def set_user_gender(user_id, gender):
     db.collection("users").document(str(user_id)).set({"gender": gender}, merge=True)
 
+def get_user_language(user_id):
+    """Қолданушының тілін алу. Әдепкі: 'kz'"""
+    doc = db.collection("users").document(str(user_id)).get()
+    if doc.exists:
+        return doc.to_dict().get("language", "kz")
+    return "kz"
+
+def set_user_language(user_id, lang):
+    """Қолданушының тілін сақтау. lang: 'kz' немесе 'ru'"""
+    db.collection("users").document(str(user_id)).set({"language": lang}, merge=True)
+
 def create_gift_code(buyer_id, buyer_name, recipient_username=None, tariff_id=None):
     """Сыйлық кодын генерациялап, draft_gifts базасына сақтайды"""
     code = "gift_" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
@@ -229,6 +240,9 @@ def redeem_gift_code(code, user_id):
     if doc.exists:
         data = doc.to_dict()
         if data.get("status") == "active":
+            # Сыйлықты жасаған адам өзі ала алмайды
+            if str(data.get("buyer_id", "")) == str(user_id):
+                return False, None, 0
             doc_ref.set({
                 "status": "used", 
                 "used_by": str(user_id), 
