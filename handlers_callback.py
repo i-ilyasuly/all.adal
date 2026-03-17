@@ -147,19 +147,12 @@ def handle_callback(cb):
     elif data == "gift_username_cancel":
         answer_callback(cb["id"])
         clear_state(user_id)
-        # Негізгі сыйлық таңдау мәзіріне қайтарамыз
-        gift_text = (
-            "🎁 <b>Premium сыйлау</b>\n\n"
-            "Сыйлықты досыңызға қалай жібергіңіз келеді?\n\n"
-            "1️⃣ <b>Сілтеме арқылы</b> — WhatsApp, Инстаграм немесе басқа желілер арқылы.\n"
-            "2️⃣ <b>Телеграм арқылы</b> — Досыңыздың чатына әдемі қорап болып барады.\n"
-            "3️⃣ <b>@username арқылы</b> — Telegram юзернеймін білсеңіз тікелей жіберіледі."
-        )
+        gift_text = t("gift_menu_text", lang)
         gift_markup = {
             "inline_keyboard": [
-                [{"text": "🔗 Сілтеме арқылы", "callback_data": "gift_type:link", "style": "success"}],
-                [{"text": "💬 Телеграм арқылы (Әдемі)", "callback_data": "gift_type:inline", "style": "success"}],
-                [{"text": "👤 @username арқылы", "callback_data": "gift_type:username", "style": "success"}]
+                [{"text": t("gift_btn_link", lang), "callback_data": "gift_type:link", "style": "success"}],
+                [{"text": t("gift_btn_inline", lang), "callback_data": "gift_type:inline", "style": "success"}],
+                [{"text": t("gift_btn_username", lang), "callback_data": "gift_type:username", "style": "success"}]
             ]
         }
         edit_message(chat_id, message_id, gift_text, gift_markup)
