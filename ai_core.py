@@ -165,12 +165,13 @@ def process_image_with_ai(image_bytes):
         print(f"[process_image_with_ai] Қате: {e}")
         return {"product_names": [f"ҚАТЕ_МӘТІНІ: {str(e)}"]}
 
-def handle_photo(image_bytes, chat_id, username):
+def handle_photo(image_bytes, chat_id, username, lang="kz"):
     ai_result = process_image_with_ai(image_bytes)
     product_names = ai_result.get("product_names", [])
     
     if not product_names:
-        return "🤷‍♂️ Суреттен анық атау немесе бренд тани алмадым.", None, ""
+        from translations import t
+        return t("photo_no_name", lang), None, ""
         
     if "ҚАТЕ_МӘТІНІ:" in product_names[0]:
         return f"❌ <b>Қате:</b> {product_names[0]}", None, ""
@@ -195,12 +196,14 @@ def handle_photo(image_bytes, chat_id, username):
     
     if all_found_items:
         if len(all_found_items) == 1:
-            text, markup = format_detail_message(all_found_items[0], confidence='exact')
-            final_text = f"👁 Суреттен <b>{product_names[0]}</b> өнімін/мекемесін таныдым:\n\n{text}"
+            text, markup = format_detail_message(all_found_items[0], confidence='exact', lang=lang)
+            from translations import t
+            final_text = t("photo_recognized", lang, name=product_names[0]) + text
             # image_url-ді де қайтарамыз — handlers_message.py суретпен жіберу үшін
             return final_text, markup, all_found_items[0].get("image_url", "")
         else:
-            reply_text = f"🔍 Суреттен <b>{product_names[0]}</b> өнімін/мекемесін таныдым. Сізге нақты қайсысы керек?\n\n"
+            from translations import t
+            reply_text = t("photo_recognized_choose", lang, name=product_names[0])
             keyboard = []
             for idx, item in enumerate(all_found_items[:5]):
                 if item['type'] == 'Мекеме':
@@ -214,4 +217,5 @@ def handle_photo(image_bytes, chat_id, username):
                 
             return reply_text, {"inline_keyboard": keyboard}, ""
     else:
-        return f"👁 Суреттен <b>{names_str}</b> өнімін/мекемесін таныдым.\n\nБірақ бұл өнім ҚМДБ Халал Даму базасында тіркелмеген.", None, ""
+        from translations import t
+        return t("photo_not_found", lang, names=names_str), None, ""
