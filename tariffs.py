@@ -57,7 +57,7 @@ def get_tariff_keyboard(callback_prefix="buy"):
             btn_text = f"{t['emoji']} {t['label']} — {t['stars']} ⭐ ({t['kzt']} ₸, -{t['discount']}%)"
         else:
             btn_text = f"{t['emoji']} {t['label']} — {t['stars']} ⭐ ({t['kzt']} ₸)"
-        keyboard.append([{"text": btn_text, "callback_data": f"{callback_prefix}_tariff:{t['id']}"}])
+        keyboard.append([{"text": btn_text, "callback_data": f"{callback_prefix}_tariff:{t['id']}", "style": "success"}])
     return {"inline_keyboard": keyboard}
 
 def get_tariff_description(tariff_id):
