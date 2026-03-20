@@ -12,7 +12,7 @@ GEOCODING_API_KEY = "AIzaSyCYQoJ6V2wYZm9LCAZDmaReft_dBpdo9r0"
 CRON_SECRET = "momyn_halal_update_777"
 
 # Gemini AI кілті
-GEMINI_API_KEY = "AIzaSyBaYzaMPJa9r8W5y5seUu52lFbbEbXATn4"
+GEMINI_API_KEY = ""
 
 # Cloud Storage (Суреттер сақталатын шелек)
 BUCKET_NAME = "momyn-vision-assets"
