@@ -8,6 +8,7 @@ from gift_state import (set_awaiting_username, clear_state, get_pending_username
                         set_pending_anon, get_pending_anon)
 
 SYMBAT_ID = 1042456426
+
 EFFECT_HALAL = "5046509860389126442"
 EFFECT_EXPIRED = "5104858069142078462"
 
@@ -18,13 +19,13 @@ def _ask_tariff_for_gift(chat_id, message_id, gift_type, recipient_username=None
     title_text = t("gift_tariff_title", lang)
     keyboard = []
     for tariff in TARIFFS:
+        label = tariff["label_ru"] if lang == "ru" else tariff["label"]
         if tariff["discount"] > 0:
-            btn_text = f"{tariff['emoji']} {tariff['label']} — {tariff['stars']} ⭐ ({tariff['kzt']} ₸, -{tariff['discount']}%)"
+            btn_text = f"{tariff['emoji']} {label} — {tariff['stars']} ⭐ ({tariff['kzt']} ₸, -{tariff['discount']}%)"
         else:
-            btn_text = f"{tariff['emoji']} {tariff['label']} — {tariff['stars']} ⭐ ({tariff['kzt']} ₸)"
+            btn_text = f"{tariff['emoji']} {label} — {tariff['stars']} ⭐ ({tariff['kzt']} ₸)"
         keyboard.append([{"text": btn_text, "callback_data": f"gift_tariff:{tariff['id']}:{gift_type}:{r}", "style": "success"}])
     edit_message(chat_id, message_id, title_text, {"inline_keyboard": keyboard})
-
 
 def _ask_anon(chat_id, message_id, gift_type, tariff_id, recipient_username=None, lang='kz'):
     """Анонимді/атымен сұрау батырмаларын шығару"""
@@ -37,7 +38,6 @@ def _ask_anon(chat_id, message_id, gift_type, tariff_id, recipient_username=None
         ]
     }
     edit_message(chat_id, message_id, text, markup)
-
 
 def handle_callback(cb):
     user_id = cb["from"]["id"]
@@ -54,14 +54,12 @@ def handle_callback(cb):
         message_id = cb["message"]["message_id"]
         inline_msg_id = None
 
-    # --- АНОНИМДІ/АТЫМЕН ТАҢДАУ ---
     # --- ТІЛ ТАҢДАУ ---
     if data.startswith("lang:"):
-        chosen_lang = data.split(":")[1]  # 'kz' немесе 'ru'
+        chosen_lang = data.split(":")[1]
         answer_callback(cb["id"])
         set_user_language(user_id, chosen_lang)
-        lang = chosen_lang  # осы сессияда жаңартамыз
-        # Тіл таңдалды — жынысын сұраймыз
+        lang = chosen_lang
         welcome_text = t('welcome_new', lang, name=cb["from"].get("first_name", ""))
         gender_markup = {"inline_keyboard": [[
             {"text": t('ask_gender_male', lang), "callback_data": "gender:male", "style": "primary"},
@@ -83,10 +81,8 @@ def handle_callback(cb):
         answer_callback(cb["id"])
         set_user_language(user_id, chosen_lang)
         lang = chosen_lang
-        # Сәтті өзгерді
         ok_text = "✅ Тіл өзгертілді: Қазақша 🇰🇿" if chosen_lang == 'kz' else "✅ Язык изменён: Русский 🇷🇺"
         edit_message(chat_id, message_id, ok_text)
-        # Мәзір батырмаларын жаңа тілде жаңартамыз
         from handlers_message import _main_keyboard
         from bot_sender import send_message as _send_msg
         _send_msg(chat_id, "👇", reply_markup=_main_keyboard(chosen_lang))
@@ -104,28 +100,22 @@ def handle_callback(cb):
     # --- ТАРИФ ТАҢДАУ (сыйлық) ---
     elif data.startswith("gift_tariff:"):
         parts = data.split(":")
-        # gift_tariff:premium_30_days:link:  немесе  gift_tariff:premium_30_days:username:aibek_kz
         tariff_id = parts[1]
         gift_type = parts[2]
         recipient = parts[3] if len(parts) > 3 else ""
         answer_callback(cb["id"])
-        # Тариф таңдалды — енді анонимді/атымен сұраймыз
         _ask_anon(chat_id, message_id, gift_type, tariff_id, recipient_username=recipient if recipient else None, lang=lang)
 
     elif data.startswith("gift_anon:"):
         parts = data.split(":")
-        # gift_anon:named:link:premium_30_days:  немесе  gift_anon:anon:username:premium_90_days:aibek_kz
-        anon_type  = parts[1]   # "named" / "anon"
-        gift_type  = parts[2]   # "link" / "inline" / "username"
-        tariff_id  = parts[3]   # "premium_30_days" т.б.
-        recipient  = parts[4] if len(parts) > 4 else ""
-
+        anon_type = parts[1]
+        gift_type = parts[2]
+        tariff_id = parts[3]
+        recipient = parts[4] if len(parts) > 4 else ""
         answer_callback(cb["id"])
-
         from tariffs import get_tariff_description
         from bot_sender import send_gift_tariff_invoice
         buyer_name_display = cb["from"].get("first_name", "Жанашыр") if anon_type == "named" else "Жасырын жанашыр"
-
         if gift_type == "username" and recipient:
             confirm_text = t("gift_confirm_username", lang, tariff=get_tariff_description(tariff_id, lang=lang), recipient=recipient, buyer=buyer_name_display)
             edit_message(chat_id, message_id, confirm_text)
@@ -140,7 +130,6 @@ def handle_callback(cb):
         username_to_gift = data.split(":", 1)[1]
         answer_callback(cb["id"])
         clear_state(user_id)
-        # Username расталды — алдымен тариф таңдатамыз
         _ask_tariff_for_gift(chat_id, message_id, "username", recipient_username=username_to_gift, lang=lang)
 
     # --- USERNAME АРҚЫЛЫ СЫЙЛЫҚ: БАС ТАРТУ ---
@@ -157,7 +146,7 @@ def handle_callback(cb):
         }
         edit_message(chat_id, message_id, gift_text, gift_markup)
 
-    # --- USERNAME ӨЗГЕРТУ (растаудан кейін «Жоқ, өзгертемін») ---
+    # --- USERNAME ӨЗГЕРТУ ---
     elif data == "gift_username_retry":
         answer_callback(cb["id"])
         clear_state(user_id)
@@ -170,7 +159,6 @@ def handle_callback(cb):
         }
         edit_message(chat_id, message_id, retry_text, cancel_markup)
 
-
     elif data == "buy_premium":
         answer_callback(cb["id"])
         handle_buy_premium_callback(chat_id, cb["id"])
@@ -178,7 +166,6 @@ def handle_callback(cb):
     elif data.startswith("gift_type:"):
         gift_type = data.split(":")[1]
         answer_callback(cb["id"])
-
         if gift_type == "username":
             set_awaiting_username(user_id)
             prompt_text = t("username_prompt", lang)
@@ -189,7 +176,6 @@ def handle_callback(cb):
             }
             edit_message(chat_id, message_id, prompt_text, cancel_markup)
         else:
-            # Алдымен тариф таңдатамыз
             _ask_tariff_for_gift(chat_id, message_id, gift_type, lang=lang)
 
     elif data.startswith("settings:"):
@@ -242,12 +228,12 @@ def handle_callback(cb):
             total_pages = math.ceil(total / per_page) if total > 0 else 1
             if page > total_pages: page = total_pages
             if page < 1: page = 1
-
             start = (page - 1) * per_page
             items = all_items[start:start + per_page]
 
             reply_text = f"🔍 <b>Табылған нұсқалар:</b> {total} дана\n📄 {page}/{total_pages} бет\n\n"
             keyboard = []
+
             for idx, item in enumerate(items, start=start + 1):
                 confidence = item.get('confidence', 'exact')
                 prefix = "❓ " if confidence == 'fuzzy' else ""
@@ -259,11 +245,12 @@ def handle_callback(cb):
                 if confidence == 'fuzzy':
                     reply_text += f"<i>⚠️ Ұқсас, бірақ нақты сәйкес емес</i>\n"
                 reply_text += "\n"
+
                 t_code = "c" if item['type'] == "Мекеме" else "i"
                 status_text = item.get('status', '')
                 if confidence == 'fuzzy':
                     btn_style = "primary"
-                elif "Белсенді" in status_text or "Рұқсат" in status_text:
+                elif "Белсенді" in status_text or "Рұқсат" in status_text or "Разрешено" in status_text:
                     btn_style = "success"
                 elif "Мерзімі" in status_text or "Қайтарып" in status_text or "🚫" in status_text:
                     btn_style = "danger"
@@ -278,7 +265,6 @@ def handle_callback(cb):
                 nav.append({"text": t("btn_next", lang), "callback_data": f"srch:{page+1}:{session_id}", "style": "primary"})
             if nav:
                 keyboard.append(nav)
-
             edit_message(chat_id, message_id, reply_text, {"inline_keyboard": keyboard})
         except Exception as e:
             print(f"[srch callback] Қате: {e}")
@@ -286,7 +272,6 @@ def handle_callback(cb):
     elif data.startswith("loc:"):
         answer_callback(cb["id"])
         try:
-            # "loc:2:43.2567:76.4521" → ["loc", "2", "43.2567", "76.4521"]
             _, page_str, lat_str, lon_str = data.split(":", 3)
             text, markup = get_nearby_companies(float(lat_str), float(lon_str), int(page_str), lang=lang)
             edit_message(chat_id, message_id, text, markup)
@@ -307,7 +292,7 @@ def handle_callback(cb):
             reaction = None
             if tier in ["premium", "VIP"]:
                 status_text = item.get("status", "")
-                if "Белсенді" in status_text or "Рұқсат" in status_text:
+                if "Белсенді" in status_text or "Рұқсат" in status_text or "Разрешено" in status_text:
                     effect = EFFECT_HALAL
                     reaction = "🎉"
                 elif "Мерзімі" in status_text or "⚠️" in status_text or "🚫" in status_text or "Қайтарып" in status_text:
@@ -315,8 +300,7 @@ def handle_callback(cb):
                     reaction = "👎"
             image_url = item.get("image_url", "")
             if image_url:
-                bot_msg_id = send_photo_message(chat_id, image_url, text,
-                                                reply_markup=markup, message_effect_id=effect)
+                bot_msg_id = send_photo_message(chat_id, image_url, text, reply_markup=markup, message_effect_id=effect)
             else:
                 bot_msg_id = send_message(chat_id, text, reply_markup=markup, message_effect_id=effect)
             print(f"[itm callback] bot_msg_id={bot_msg_id}")
