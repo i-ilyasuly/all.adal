@@ -67,7 +67,15 @@ def format_item_dict(data, type_name):
             "info": strip_html(data.get("desc", "")),
             "status": st
         }
-
+def _localize_status(status, lang):
+    """Статус жолын берілген тілге аударады (тек display үшін)."""
+    if lang != 'ru':
+        return status
+    return (status
+        .replace("✅ Рұқсат етілген", "✅ Разрешено (халяль)")
+        .replace("🚫 Харам",          "🚫 Харам")
+        .replace("⚠️ Күдікті",        "⚠️ Сомнительно"))
+        
 def format_detail_message(item, confidence='exact', query_text='', lang='kz'):
     """
     confidence='exact' → қалыпты хабар
@@ -93,7 +101,7 @@ def format_detail_message(item, confidence='exact', query_text='', lang='kz'):
 
         if item['desc'] and item['desc'] != "Белгісіз":
             msg += t('result_manufacturer', lang, desc=item['desc'])
-        msg += t('result_status', lang, status=item['status'])
+        msg += t('result_status', lang, status=_localize_status(item['status'], lang))
 
         d_start = item.get('date_start')
         d_end = item.get('date_end')
