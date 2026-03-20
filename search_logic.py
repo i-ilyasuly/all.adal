@@ -11,7 +11,7 @@ def clean_text(text):
                     'қ': 'q', 'ө': 'o', 'һ': 'h'}
     for k, v in replacements.items():
         text = text.replace(k, v)
-    return re.sub(r'[\W_]+', '', text)
+    return re.sub(r'[\W\_]+', '', text)
 
 def get_variants(text):
     text = text.lower()
@@ -47,7 +47,6 @@ def get_nearby_companies(user_lat, user_lon, page=1, lang="kz"):
             c_lat, c_lon = coords
             dist = get_distance(user_lat, user_lon, c_lat, c_lon)
             if dist <= 50:
-                # API-да "categories" (массив) немесе "category" (dict/string) болуы мүмкін
                 cat = ""
                 raw_cat = c.get("categories") or c.get("category", "")
                 if isinstance(raw_cat, list) and raw_cat:
@@ -57,6 +56,7 @@ def get_nearby_companies(user_lat, user_lon, page=1, lang="kz"):
                 elif isinstance(raw_cat, str):
                     cat = raw_cat
                 if not cat: cat = "Тамақтану орындары / Мекеме"
+
                 address = c.get("address", "") or c.get("legal_address", "Мекенжай көрсетілмеген")
                 nearby.append({
                     "title": c.get("title") or c.get("legal_name", "Белгісіз"),
@@ -81,6 +81,7 @@ def get_nearby_companies(user_lat, user_lon, page=1, lang="kz"):
     from translations import t
     text = t("location_header", lang, page=page, total_pages=total_pages, total=total_items)
     inline_keyboard = []
+
     for idx, item in enumerate(items_to_show, start=start_idx + 1):
         dist_str = f"{item['dist']:.2f} км" if item['dist'] >= 1 else f"{int(item['dist']*1000)} м"
         clean_title = str(item['title']).strip('«»"\' ')
@@ -89,17 +90,19 @@ def get_nearby_companies(user_lat, user_lon, page=1, lang="kz"):
         elif cert_status == "expired": st = "❌ Мерзімі аяқталған"
         elif cert_status == "revoked": st = "🚫 Қайтарып алынған"
         else: st = f"⚠️ {cert_status}"
+
         d_start, d_end = item['date_start'], item['date_end']
-        date_str = f"\n   📅 {d_start} - {d_end}" if d_start and d_end else (f"\n   📅 {d_end} дейін" if d_end else "")
+        date_str = f"\n    📅 {d_start} - {d_end}" if d_start and d_end else (f"\n    📅 {d_end} дейін" if d_end else "")
         icon = "✅" if "Белсенді" in st else "⚠️"
-        text += f"{icon} <b>{idx}. «{clean_title}»</b>\n   🏷 {item['category']}\n   📍 {item['address']}\n   📏 {dist_str}\n   📊 {st}{date_str}\n\n"
-        # Статусқа қарай түс
+        text += f"{icon} <b>{idx}. «{clean_title}»</b>\n    🏷 {item['category']}\n    📍 {item['address']}\n    📏 {dist_str}\n    📊 {st}{date_str}\n\n"
+
         if cert_status == "active":
             btn_style = "success"
         elif cert_status in ("expired", "revoked"):
             btn_style = "danger"
         else:
             btn_style = "primary"
+
         btn = {"text": f"🗺️ {idx}. «{clean_title}»", "url": item['link'], "style": btn_style}
         inline_keyboard.append([btn])
 
@@ -107,6 +110,7 @@ def get_nearby_companies(user_lat, user_lon, page=1, lang="kz"):
     if page > 1: nav_buttons.append({"text": t("btn_back", lang), "callback_data": f"loc:{page-1}:{round(user_lat,4)}:{round(user_lon,4)}", "style": "primary"})
     if page < total_pages: nav_buttons.append({"text": t("btn_next", lang), "callback_data": f"loc:{page+1}:{round(user_lat,4)}:{round(user_lon,4)}", "style": "primary"})
     if nav_buttons: inline_keyboard.append(nav_buttons)
+
     return text, {"inline_keyboard": inline_keyboard}
 
 def search_e_code(query_text):
@@ -157,8 +161,7 @@ def _is_match(query_text, title):
             if fuzz.partial_ratio(w_var, title.lower()) > 80:
                 return 'exact'
 
-    # ── 3. FUZZY RATIO — қате жазылған сөздер үшін (ЖАҢА) ────────────────
-    # «сарыбас» vs «сарыюас» — Levenshtein бір әріп айырмасын ұстайды
+    # ── 3. FUZZY RATIO — қате жазылған сөздер үшін ────────────────────────
     for var in variants:
         v_clean = clean_text(var)
         r = fuzz.ratio(v_clean, t_clean)
@@ -183,10 +186,9 @@ def _is_match(query_text, title):
 def search_data(query_text):
     """
     Іздеу функциясы — бастапқы логика сақталған + жаңалықтар:
-    - confidence: 'exact' | 'fuzzy' (fuzzy нәтижелерде UI ескерту шығарады)
+    - confidence: 'exact' | 'fuzzy'
     - Мекеме: title бар болса тек title, бос болса legal_name
-    - Қоспа: тек title
-    - legal_name/name өрістерінен ІЗДЕМЕЙДІ (title бар болған жағдайда)
+    - Қоспа: title (E-код) ЖӘНЕ name (мәтіндік атауы) — екеуінен де іздейді
     """
     load_cache()
     results = []
@@ -194,15 +196,13 @@ def search_data(query_text):
     # ── E-КОД іздеу ───────────────────────────────────────────────────────
     e_code = search_e_code(query_text)
     if e_code:
-        # e_code әрқашан латын e — базада кирилица болуы мүмкін, нормализациялаймыз
         e_normalized = e_code.replace('е', 'e')
         for i in CACHE["ingredients"]:
             title = i.get("title", "")
             name = i.get("name", "")
-            # title/name ішінде e_code бар ма — substring тексеру
             t_norm = clean_text(title).replace('е', 'e')
             n_norm = clean_text(name).replace('е', 'e')
-            if (e_normalized in t_norm and len(e_normalized) > 2) or                (e_normalized in n_norm and len(e_normalized) > 2):
+            if (e_normalized in t_norm and len(e_normalized) > 2) or (e_normalized in n_norm and len(e_normalized) > 2):
                 item = format_item_dict(i, "Қоспа")
                 item['confidence'] = 'exact'
                 results.append(item)
@@ -210,14 +210,13 @@ def search_data(query_text):
             return results
 
     # ── МЕКЕМЕЛЕР іздеу ───────────────────────────────────────────────────
-    # title БАР болса — тек title-дан іздейміз (legal_name = өндіруші, елемейміз)
-    # title БОС болса — legal_name атау ретінде де, іздеу өрісі ретінде де
     for c in CACHE["companies"]:
         title = c.get("title", "") or ""
         legal = c.get("legal_name", "") or ""
         search_field = title if title else legal
         if not search_field:
             continue
+
         confidence = _is_match(query_text, search_field)
         if confidence != 'none':
             item = format_item_dict(c, "Мекеме")
@@ -226,19 +225,34 @@ def search_data(query_text):
             if len(results) >= 20:
                 break
 
-    # ── ҚОСПАЛАР іздеу — тек title ────────────────────────────────────────
+    # ── ҚОСПАЛАР іздеу — title (E-код) ЖӘНЕ name (мәтіндік атауы) ────────
+    # ӨЗГЕРТУ #1: Бұрын тек title (E120 сияқты код) іздейтін.
+    # Енді name өрісінен де іздейді — "Кармин", "Лецитин" сияқты атаулар да табылады.
     for i in CACHE["ingredients"]:
         title = i.get("title", "") or ""
-        if not title:
+        name = i.get("name", "") or ""
+
+        # title-дан (E-код) іздеу
+        conf_title = _is_match(query_text, title) if title else 'none'
+        # name-дан (мәтіндік атауы) іздеу — ЖАҢА
+        conf_name = _is_match(query_text, name) if name else 'none'
+
+        # Екеуінен жақсысын аламыз: exact > fuzzy > none
+        if conf_title == 'exact' or conf_name == 'exact':
+            confidence = 'exact'
+        elif conf_title == 'fuzzy' or conf_name == 'fuzzy':
+            confidence = 'fuzzy'
+        else:
             continue
-        confidence = _is_match(query_text, title)
-        if confidence != 'none':
-            if not any(r.get("title") == title for r in results):
-                item = format_item_dict(i, "Қоспа")
-                item['confidence'] = confidence
-                results.append(item)
-            if len(results) >= 20:
-                break
+
+        # Қайталануды болдырмау
+        if not any(r.get("title") == title for r in results):
+            item = format_item_dict(i, "Қоспа")
+            item['confidence'] = confidence
+            results.append(item)
+
+        if len(results) >= 20:
+            break
 
     # Exact нәтижелер алдымен, fuzzy соңында
     results.sort(key=lambda x: 0 if x.get('confidence') == 'exact' else 1)
