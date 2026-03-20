@@ -1,12 +1,12 @@
 # Телеграм
-BOT_TOKEN = "8304478834:AAGZVSVraMO_09YrbKqIgZ7S86biVZYAfLw"
+BOT_TOKEN = ""
 WEBHOOK_SECRET = "momyn-secret-2024"
 
 # Гугл Жобасы
 PROJECT_ID = "momyn-t1"
 REGION = "us-central1"
 
-GEOCODING_API_KEY = "AIzaSyCYQoJ6V2wYZm9LCAZDmaReft_dBpdo9r0"
+GEOCODING_API_KEY = ""
 
 # Түнгі жаңарту паролі
 CRON_SECRET = "momyn_halal_update_777"
