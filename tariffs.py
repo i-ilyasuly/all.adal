@@ -51,6 +51,11 @@ def get_tariff_by_id(tariff_id):
     return None
 
 def get_tariff_keyboard(callback_prefix="buy", lang="kz"):
+    """
+    Тариф таңдау inline батырмалары.
+    callback_prefix: 'buy' немесе 'gift' — сыйлық/өзіне алу үшін
+    lang: 'kz' немесе 'ru' — батырма мәтінінің тілі
+    """
     keyboard = []
     for t in TARIFFS:
         label = t["label_ru"] if lang == "ru" else t["label"]
