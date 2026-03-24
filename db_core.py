@@ -7,7 +7,8 @@ import uuid
 
 db = firestore.Client()
 bq_client = bigquery.Client()
-CACHE = {"companies": [], "ingredients": [], "loaded": False}
+CACHE = {"companies": [], "ingredients": [], "loaded": False, "loaded_at": None}
+CACHE_TTL_SECONDS = 1800  # 30 минут — cron осыдан жиі жұмыс жасамайды
 
 def _now():
     """Барлық жерде бір timezone: UTC. Бұл функцияны пайдалан."""
@@ -45,18 +46,29 @@ def log_to_bigquery(user_id, action, query_text, status,
         print(f"BigQuery жүйелік қатесі: {e}")
 
 def load_cache():
-    if not CACHE["loaded"]:
-        comps = db.collection("companies").stream()
-        CACHE["companies"] = [c.to_dict() for c in comps]
-        ings = db.collection("ingredients").stream()
-        CACHE["ingredients"] = [i.to_dict() for i in ings]
-        CACHE["loaded"] = True
+    """Кэш жүктеу — 30 минуттан ескі болса автоматты жаңартады"""
+    now = _now()
+    cache_expired = (
+        not CACHE["loaded"] or
+        CACHE["loaded_at"] is None or
+        (now - CACHE["loaded_at"]).total_seconds() > CACHE_TTL_SECONDS
+    )
+    if not cache_expired:
+        return  # Кэш жаңа ✅
+
+    comps = db.collection("companies").stream()
+    CACHE["companies"] = [c.to_dict() for c in comps]
+    ings = db.collection("ingredients").stream()
+    CACHE["ingredients"] = [i.to_dict() for i in ings]
+    CACHE["loaded"] = True
+    CACHE["loaded_at"] = now
 
 def clear_cache():
     global CACHE
     CACHE["companies"] = []
     CACHE["ingredients"] = []
     CACHE["loaded"] = False
+    CACHE["loaded_at"] = None
 
 def get_chat_history(user_id):
     doc = db.collection("chat_history").document(str(user_id)).get()
@@ -274,3 +286,32 @@ def get_search_session(session_id):
     if doc.exists:
         return doc.to_dict().get("items", [])
     return []
+
+# ════════════════════════════════════════════════════════════════
+# USER STATE — Firestore-да сақтау (gift_state үшін)
+# ════════════════════════════════════════════════════════════════
+
+def set_user_state(user_id, data: dict):
+    """Қолданушы күйін Firestore-ға жазу"""
+    db.collection("user_states").document(str(user_id)).set({
+        **data,
+        "updated_at": firestore.SERVER_TIMESTAMP
+    })
+
+def get_user_state(user_id):
+    """Қолданушы күйін Firestore-дан оқу"""
+    doc = db.collection("user_states").document(str(user_id)).get()
+    if doc.exists:
+        return doc.to_dict()
+    return None
+
+def get_user_state_field(user_id, field: str):
+    """Күйдің бір өрісін алу"""
+    state = get_user_state(user_id)
+    if state:
+        return state.get(field)
+    return None
+
+def clear_user_state(user_id):
+    """Қолданушы күйін Firestore-дан өшіру"""
+    db.collection("user_states").document(str(user_id)).delete()
