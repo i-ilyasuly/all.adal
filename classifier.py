@@ -14,7 +14,7 @@ def classify_query(text):
     Тек 4+ сөзді сұраулар үшін шақырылады.
     Gemini Flash Lite — жылдам әрі арзан.
     """
-    model = genai.GenerativeModel('gemini-2.0-flash-lite')
+    model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
 
     prompt = f"""Сен халал тамақ тексеретін Telegram бот үшін сұрауды талдайсың.
 Сенің жалғыз міндетің: пайдаланушы НЕНІ іздеп жатқанын дәл анықтау.
