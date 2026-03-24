@@ -1,37 +1,52 @@
-# Уақытша state: {user_id: {"step": "...", ...}}
-_states = {}
+"""
+gift_state.py — Қолданушы күйін Firestore-да сақтайды.
+
+Бұрын: _states = {} (instance жадында — instance өшсе жоғалатын)
+Енді:  Firestore "user_states" коллекциясы (бұлтта — ешқашан жоғалмайды)
+"""
+
+from db_core import (
+    get_user_state, set_user_state, clear_user_state, get_user_state_field
+)
+
 
 def set_awaiting_username(user_id):
     """Пайдаланушы @username енгізуін күту режимі"""
-    _states[str(user_id)] = {"step": "awaiting_username"}
+    set_user_state(user_id, {"step": "awaiting_username"})
+
 
 def is_awaiting_username(user_id):
-    state = _states.get(str(user_id))
+    state = get_user_state(user_id)
     return state and state.get("step") == "awaiting_username"
+
 
 def set_confirm_username(user_id, username):
     """Username расталуын күту режимі"""
-    _states[str(user_id)] = {"step": "confirm_username", "username": username}
+    set_user_state(user_id, {"step": "confirm_username", "username": username})
+
 
 def get_pending_username(user_id):
-    state = _states.get(str(user_id))
+    state = get_user_state(user_id)
     if state and state.get("step") == "confirm_username":
         return state.get("username")
     return None
+
 
 def set_pending_anon(user_id, gift_type, recipient_username=None):
     """Анонимді/атымен сұрауын күту — gift_type және recipient сақталады"""
     data = {"step": "awaiting_anon", "gift_type": gift_type}
     if recipient_username:
         data["recipient_username"] = recipient_username
-    _states[str(user_id)] = data
+    set_user_state(user_id, data)
+
 
 def get_pending_anon(user_id):
     """Анонимді/атымен күтіп тұрса — (gift_type, recipient_username) қайтарады"""
-    state = _states.get(str(user_id))
+    state = get_user_state(user_id)
     if state and state.get("step") == "awaiting_anon":
         return state.get("gift_type"), state.get("recipient_username")
     return None, None
 
+
 def clear_state(user_id):
-    _states.pop(str(user_id), None)
+    clear_user_state(user_id)
