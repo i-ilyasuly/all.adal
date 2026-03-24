@@ -59,4 +59,14 @@ def update_database():
     except Exception as e:
         result_text += f"ҚАТЕ (Қоспалар): {e}\n"
 
+    # 3. КЭШ ЖАҢАРТУ УАҚЫТЫН ЖАЗ
+    # Барлық instance-тар осы уақытты тексеріп кэшін жаңартады
+    try:
+        db.collection("cache_meta").document("last_updated").set({
+            "updated_at": firestore.SERVER_TIMESTAMP
+        })
+        result_text += "- Кэш timestamp жаңартылды.\n"
+    except Exception as e:
+        result_text += f"ҚАТЕ (cache_meta): {e}\n"
+
     return result_text
