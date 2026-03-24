@@ -1,4 +1,4 @@
-from bot_sender import send_message, send_photo_message, edit_message, edit_reply_markup, answer_callback, set_message_reaction, send_gift_invoice
+from bot_sender import send_message, send_photo_message, edit_message, edit_reply_markup, answer_callback, set_message_reaction
 from db_core import set_user_gender, log_to_bigquery, get_item_by_id, check_access, get_search_session, get_user_language, set_user_language
 from translations import t
 from search_logic import get_nearby_companies
@@ -231,7 +231,7 @@ def handle_callback(cb):
             start = (page - 1) * per_page
             items = all_items[start:start + per_page]
 
-            reply_text = f"🔍 <b>Табылған нұсқалар:</b> {total} дана\n📄 {page}/{total_pages} бет\n\n"
+            reply_text = t("search_results_header", lang, total=total, page=page, total_pages=total_pages)
             keyboard = []
 
             for idx, item in enumerate(items, start=start + 1):
@@ -243,7 +243,7 @@ def handle_callback(cb):
                     desc_text = f"🏷 {item.get('desc', '')}"
                 reply_text += f"<b>{idx}. {prefix}«{item['title']}»</b>\n{desc_text}\n"
                 if confidence == 'fuzzy':
-                    reply_text += f"<i>⚠️ Ұқсас, бірақ нақты сәйкес емес</i>\n"
+                    reply_text += t("search_fuzzy_note", lang)
                 reply_text += "\n"
 
                 t_code = "c" if item['type'] == "Мекеме" else "i"
@@ -279,13 +279,13 @@ def handle_callback(cb):
             print(f"[loc callback] Қате: {e}, data={data}")
 
     elif data.startswith("itm:"):
-        answer_callback(cb["id"])
         parts = data.split(":")
         t_code, item_id = parts[1], parts[2]
         print(f"[itm callback] t_code={t_code}, item_id={item_id}, chat_id={chat_id}")
         item = get_item_by_id(t_code, item_id)
         print(f"[itm callback] item={'табылды' if item else 'ТАБЫЛМАДЫ'}")
         if item:
+            answer_callback(cb["id"])
             text, markup = format_detail_message(item, confidence='exact', lang=lang)
             has_access, tier = check_access(user_id, user_id == SYMBAT_ID)
             effect = None
