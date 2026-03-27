@@ -8,11 +8,39 @@ import uuid
 db = firestore.Client()
 bq_client = bigquery.Client()
 CACHE = {"companies": [], "ingredients": [], "loaded": False, "loaded_at": None}
-CACHE_TTL_SECONDS = 1800  # 30 минут — cron осыдан жиі жұмыс жасамайды
+CACHE_TTL_SECONDS = 7200  # 2 сағат — reads азайту үшін
+
+# ════════════════════════════════════════════════════════════════
+# USER CACHE — Firestore reads азайту үшін (5 минут TTL)
+# ════════════════════════════════════════════════════════════════
+USER_CACHE = {}       # {user_id: {"data": {...}, "loaded_at": datetime}}
+USER_CACHE_TTL = 300  # 5 минут
 
 def _now():
     """Барлық жерде бір timezone: UTC. Бұл функцияны пайдалан."""
     return datetime.now(timezone.utc)
+
+def _get_user_data(user_id):
+    """
+    Пайдаланушы деректерін кэштен алады.
+    Кэш жоқ немесе ескі болса — Firestore-дан оқиды.
+    """
+    now = _now()
+    cached = USER_CACHE.get(str(user_id))
+    if cached:
+        age = (now - cached["loaded_at"]).total_seconds()
+        if age < USER_CACHE_TTL:
+            return cached["data"]  # Кэштен ✅
+
+    # Кэш жоқ немесе ескі — Firestore-дан оқимыз
+    doc = db.collection("users").document(str(user_id)).get()
+    data = doc.to_dict() if doc.exists else {}
+    USER_CACHE[str(user_id)] = {"data": data, "loaded_at": now}
+    return data
+
+def _invalidate_user_cache(user_id):
+    """Кэшті жою — деректер өзгергенде шақырылады."""
+    USER_CACHE.pop(str(user_id), None)
 
 def log_to_bigquery(user_id, action, query_text, status,
                     is_premium=None, result_count=None,
@@ -46,7 +74,7 @@ def log_to_bigquery(user_id, action, query_text, status,
         print(f"BigQuery жүйелік қатесі: {e}")
 
 def load_cache():
-    """Кэш жүктеу — 30 минуттан ескі болса автоматты жаңартады"""
+    """Кэш жүктеу — CACHE_TTL_SECONDS-тан ескі болса автоматты жаңартады"""
     now = _now()
     cache_expired = (
         not CACHE["loaded"] or
@@ -101,15 +129,13 @@ def get_item_by_id(item_type_code, item_id):
 def check_access(user_id, is_symbat):
     if is_symbat:
         return True, "VIP"
-        
-    doc_ref = db.collection("users").document(str(user_id))
-    doc = doc_ref.get()
-    if not doc.exists:
+
+    data = _get_user_data(user_id)  # Firestore емес, кэштен! ✅
+    if not data:
         return True, "free"
-    
-    data = doc.to_dict()
+
     today_str = _now().strftime("%Y-%m-%d")
-    
+
     prem_until = data.get("premium_until")
     if prem_until:
         # Firestore-дан timezone-сыз келуі мүмкін — қауіпсіз түрде тексереміз
@@ -121,23 +147,23 @@ def check_access(user_id, is_symbat):
                 if data.get("last_search_date") == today_str and data.get("daily_searches", 0) >= 150:
                     return False, "SPAM_LIMIT"
                 return True, "premium"
-                
+
     last_date = data.get("last_search_date")
     usage = data.get("daily_searches", 0)
-    
+
     if last_date != today_str:
-        usage = 0 
-        
+        usage = 0
+
     if usage >= 5:
         return False, "LIMIT"
-        
+
     return True, "free"
 
 def increment_usage(user_id):
     doc_ref = db.collection("users").document(str(user_id))
     doc = doc_ref.get()
     today_str = _now().strftime("%Y-%m-%d")
-    
+
     if doc.exists:
         data = doc.to_dict()
         if data.get("last_search_date") == today_str:
@@ -152,6 +178,7 @@ def increment_usage(user_id):
             "daily_searches": 1,
             "last_search_date": today_str
         }, merge=True)
+    _invalidate_user_cache(user_id)  # Деректер өзгерді — кэшті тазала ✅
 
 def grant_premium(user_id, days=30):
     """
@@ -174,6 +201,7 @@ def grant_premium(user_id, days=30):
 
     new_date = base + timedelta(days=days)
     doc_ref.set({"premium_until": new_date}, merge=True)
+    _invalidate_user_cache(user_id)  # Деректер өзгерді — кэшті тазала ✅
 
 def revoke_premium(user_id):
     db.collection("users").document(str(user_id)).set({"premium_until": None}, merge=True)
@@ -199,14 +227,13 @@ def set_user_gender(user_id, gender):
 
 def get_user_language(user_id):
     """Қолданушының тілін алу. Әдепкі: 'kz'"""
-    doc = db.collection("users").document(str(user_id)).get()
-    if doc.exists:
-        return doc.to_dict().get("language", "kz")
-    return "kz"
+    data = _get_user_data(user_id)  # Firestore емес, кэштен! ✅
+    return data.get("language", "kz")
 
 def set_user_language(user_id, lang):
     """Қолданушының тілін сақтау. lang: 'kz' немесе 'ru'"""
     db.collection("users").document(str(user_id)).set({"language": lang}, merge=True)
+    _invalidate_user_cache(user_id)  # Деректер өзгерді — кэшті тазала ✅
 
 def create_gift_code(buyer_id, buyer_name, recipient_username=None, tariff_id=None):
     """Сыйлық кодын генерациялап, draft_gifts базасына сақтайды"""
@@ -248,7 +275,7 @@ def redeem_gift_code(code, user_id):
     """Сыйлық кодын қолдану (Premium беру)"""
     doc_ref = db.collection("draft_gifts").document(code)
     doc = doc_ref.get()
-    
+
     if doc.exists:
         data = doc.to_dict()
         if data.get("status") == "active":
@@ -256,8 +283,8 @@ def redeem_gift_code(code, user_id):
             if str(data.get("buyer_id", "")) == str(user_id):
                 return False, None, 0
             doc_ref.set({
-                "status": "used", 
-                "used_by": str(user_id), 
+                "status": "used",
+                "used_by": str(user_id),
                 "used_at": firestore.SERVER_TIMESTAMP
             }, merge=True)
             # Тарифке сәйкес күн санын аламыз
@@ -266,7 +293,7 @@ def redeem_gift_code(code, user_id):
             t = get_tariff_by_id(tariff_id) or {"days": 30}
             grant_premium(user_id, days=t["days"])
             return True, data.get("buyer_name", "Жасырын адам"), t["days"]
-            
+
     return False, None, 0
 
 def save_search_session(user_id, items):
