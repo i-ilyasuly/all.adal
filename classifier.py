@@ -14,7 +14,7 @@ def classify_query(text):
     Тек 4+ сөзді сұраулар үшін шақырылады.
     Gemini Flash Lite — жылдам әрі арзан.
     """
-    model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+    model = genai.GenerativeModel('gemini-2.5-flash')
 
     prompt = f"""Сен халал тамақ тексеретін Telegram бот үшін сұрауды талдайсың.
 Сенің жалғыз міндетің: пайдаланушы НЕНІ іздеп жатқанын дәл анықтау.
@@ -75,7 +75,10 @@ def classify_query(text):
         hint = f"\nЕскерту: Мәтінде тырнақшаға алынған атау бар: {quoted}. Іздеу атауы осы болуы мүмкін."
 
     try:
-        response = model.generate_content(prompt + hint)
+        response = model.generate_content(
+                    prompt + hint,
+                    request_options={"timeout": 10}
+                )
         raw = response.text.strip()
         # JSON тазалау
         raw = re.sub(r'```json\s*', '', raw)
