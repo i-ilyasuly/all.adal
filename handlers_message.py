@@ -9,6 +9,7 @@ from db_core import (add_user, save_chat_history, log_to_bigquery, check_access,
 from translations import t
 from search_logic import search_data, get_nearby_companies
 from formatters import format_detail_message
+from quotes import get_quote
 from ai_core import handle_photo, chat_with_ai, extract_search_term, get_not_found_reply
 from classifier import classify_query, should_classify
 from payments import process_successful_payment, get_premium_keyboard
@@ -134,6 +135,10 @@ def handle_message(msg):
         lat, lon = msg["location"]["latitude"], msg["location"]["longitude"]
         text, markup = get_nearby_companies(lat, lon, page=1, lang=lang)
         effect = EFFECT_HALAL if tier in ["premium", "VIP"] else None
+        if tier in ["premium", "VIP"]:
+            quote = get_quote("location", lang)
+            if quote:
+                text += f"\n\n{quote}"
         bot_msg_id = send_message(chat_id, text, reply_markup=markup, message_effect_id=effect)
         if tier in ["premium", "VIP"] and bot_msg_id:
             set_message_reaction(chat_id, bot_msg_id, "⚡")
@@ -205,7 +210,11 @@ def handle_message(msg):
                     [{"text": t("gift_btn_username", lang), "callback_data": "gift_type:username", "style": "success"}]
                 ]
             }
-            bot_msg_id = send_message(chat_id, t("gift_menu_text", lang),
+            gift_text = t("gift_menu_text", lang)
+            quote = get_quote("gift_received", lang)
+            if quote:
+                gift_text += f"\n\n{quote}"
+            bot_msg_id = send_message(chat_id, gift_text,
                                       reply_markup=gift_markup, reply_to_message_id=user_msg_id)
             if bot_msg_id:
                 set_message_reaction(chat_id, bot_msg_id, "🤔")
@@ -214,7 +223,11 @@ def handle_message(msg):
         elif text in ("⭐️ Premium алу", "⭐️ Купить Premium"):
             send_chat_action(chat_id, "typing")
             from tariffs import get_tariff_keyboard
-            send_message(chat_id, t("premium_buy_text", lang),
+            buy_text = t("premium_buy_text", lang)
+            quote = get_quote("payment", lang)
+            if quote:
+                buy_text += f"\n\n{quote}"
+            send_message(chat_id, buy_text,
                          reply_markup=get_tariff_keyboard("buy", lang=lang),
                          reply_to_message_id=user_msg_id)
             return
@@ -233,6 +246,9 @@ def handle_message(msg):
                         f"{gift_days} күн"
                     )
                     gift_msg = t("gift_received", lang, buyer=buyer_name, label=gift_label)
+                    quote = get_quote("gift_received", lang)
+                    if quote:
+                        gift_msg += f"\n\n{quote}"
                     bot_msg_id = send_message(chat_id, gift_msg, reply_markup=_main_keyboard(lang),
                                               reply_to_message_id=user_msg_id,
                                               message_effect_id=EFFECT_HALAL)
@@ -280,6 +296,9 @@ def handle_message(msg):
                                 f"{gift_days} күн"
                             )
                             gift_msg = t("gift_pending_received", lang, buyer=buyer_name, label=gift_label)
+                            quote = get_quote("gift_received", lang)
+                            if quote:
+                                gift_msg += f"\n\n{quote}"
                             bot_msg_id = send_message(chat_id, gift_msg, reply_markup=_main_keyboard(lang),
                                                       reply_to_message_id=user_msg_id,
                                                       message_effect_id=EFFECT_HALAL)
@@ -403,6 +422,10 @@ def handle_message(msg):
                         set_message_reaction(chat_id, user_msg_id, "😔")
 
                     not_found_reply = get_not_found_reply(search_query, normalized_query, lang=lang)
+                    if tier in ["premium", "VIP"]:
+                        quote = get_quote("not_found", lang)
+                        if quote:
+                            not_found_reply += f"\n\n{quote}"
                     keys = {"inline_keyboard": [[
                         {"text": t("btn_good", lang), "callback_data": "fb:good:ai", "style": "success"},
                         {"text": t("btn_bad", lang), "callback_data": "fb:bad:ai", "style": "danger"}
@@ -425,7 +448,7 @@ def _send_search_results(chat_id, user_msg_id, found_items, original_text, lang,
     if len(found_items) == 1:
         confidence = found_items[0].get('confidence', 'exact')
         reply_text, markup = format_detail_message(found_items[0], confidence=confidence,
-                                                   query_text=original_text, lang=lang)
+                                                   query_text=original_text, lang=lang, tier=tier)
         effect = None
         reaction = None
         if tier in ["premium", "VIP"]:
