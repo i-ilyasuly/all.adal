@@ -13,7 +13,6 @@ EFFECT_HALAL = "5046509860389126442"
 EFFECT_EXPIRED = "5104858069142078462"
 
 def _ask_tariff_for_gift(chat_id, message_id, gift_type, recipient_username=None, lang='kz'):
-    """Сыйлық үшін тариф таңдату"""
     from tariffs import TARIFFS
     r = recipient_username or ""
     title_text = t("gift_tariff_title", lang)
@@ -28,7 +27,6 @@ def _ask_tariff_for_gift(chat_id, message_id, gift_type, recipient_username=None
     edit_message(chat_id, message_id, title_text, {"inline_keyboard": keyboard})
 
 def _ask_anon(chat_id, message_id, gift_type, tariff_id, recipient_username=None, lang='kz'):
-    """Анонимді/атымен сұрау батырмаларын шығару"""
     text = t("gift_ask_anon", lang)
     r = recipient_username or ""
     markup = {
@@ -104,7 +102,8 @@ def handle_callback(cb):
         gift_type = parts[2]
         recipient = parts[3] if len(parts) > 3 else ""
         answer_callback(cb["id"])
-        _ask_anon(chat_id, message_id, gift_type, tariff_id, recipient_username=recipient if recipient else None, lang=lang)
+        _ask_anon(chat_id, message_id, gift_type, tariff_id,
+                  recipient_username=recipient if recipient else None, lang=lang)
 
     elif data.startswith("gift_anon:"):
         parts = data.split(":")
@@ -117,11 +116,16 @@ def handle_callback(cb):
         from bot_sender import send_gift_tariff_invoice
         buyer_name_display = cb["from"].get("first_name", "Жанашыр") if anon_type == "named" else "Жасырын жанашыр"
         if gift_type == "username" and recipient:
-            confirm_text = t("gift_confirm_username", lang, tariff=get_tariff_description(tariff_id, lang=lang), recipient=recipient, buyer=buyer_name_display)
+            confirm_text = t("gift_confirm_username", lang,
+                             tariff=get_tariff_description(tariff_id, lang=lang),
+                             recipient=recipient, buyer=buyer_name_display)
             edit_message(chat_id, message_id, confirm_text)
-            send_gift_tariff_invoice(chat_id, tariff_id, "username", recipient_username=recipient, buyer_name=buyer_name_display)
+            send_gift_tariff_invoice(chat_id, tariff_id, "username",
+                                     recipient_username=recipient, buyer_name=buyer_name_display)
         else:
-            confirm_text = t("gift_confirm_other", lang, tariff=get_tariff_description(tariff_id, lang=lang), buyer=buyer_name_display)
+            confirm_text = t("gift_confirm_other", lang,
+                             tariff=get_tariff_description(tariff_id, lang=lang),
+                             buyer=buyer_name_display)
             edit_message(chat_id, message_id, confirm_text)
             send_gift_tariff_invoice(chat_id, tariff_id, gift_type, buyer_name=buyer_name_display)
 
@@ -130,7 +134,8 @@ def handle_callback(cb):
         username_to_gift = data.split(":", 1)[1]
         answer_callback(cb["id"])
         clear_state(user_id)
-        _ask_tariff_for_gift(chat_id, message_id, "username", recipient_username=username_to_gift, lang=lang)
+        _ask_tariff_for_gift(chat_id, message_id, "username",
+                             recipient_username=username_to_gift, lang=lang)
 
     # --- USERNAME АРҚЫЛЫ СЫЙЛЫҚ: БАС ТАРТУ ---
     elif data == "gift_username_cancel":
@@ -198,10 +203,14 @@ def handle_callback(cb):
         answer_callback(cb["id"])
         from handlers_message import _main_keyboard
         if lang == 'kz':
-            success_text = "Рақмет, сақталды! 👍\n\nЕнді бастайық 🚀\nМаған кез келген өнімнің атын жазыңыз, суретін жіберіңіз немесе жақын маңдағы халал дәмханаларды іздеп көріңіз!"
+            success_text = ("Рақмет, сақталды! 👍\n\nЕнді бастайық 🚀\n"
+                            "Маған кез келген өнімнің атын жазыңыз, суретін жіберіңіз "
+                            "немесе жақын маңдағы халал дәмханаларды іздеп көріңіз!")
             menu_text = "Мәзірдегі батырмаларды қолдана аласыз 👇"
         else:
-            success_text = "Спасибо, сохранено! 👍\n\nНачнём 🚀\nНапишите название продукта, пришлите фото или найдите ближайшие халяльные заведения!"
+            success_text = ("Спасибо, сохранено! 👍\n\nНачнём 🚀\n"
+                            "Напишите название продукта, пришлите фото или найдите "
+                            "ближайшие халяльные заведения!")
             menu_text = "Используйте кнопки меню ниже 👇"
         edit_message(chat_id, message_id, success_text)
         send_message(chat_id, menu_text, reply_markup=_main_keyboard(lang))
@@ -231,7 +240,8 @@ def handle_callback(cb):
             start = (page - 1) * per_page
             items = all_items[start:start + per_page]
 
-            reply_text = t("search_results_header", lang, total=total, page=page, total_pages=total_pages)
+            reply_text = t("search_results_header", lang,
+                           total=total, page=page, total_pages=total_pages)
             keyboard = []
 
             for idx, item in enumerate(items, start=start + 1):
@@ -256,13 +266,21 @@ def handle_callback(cb):
                     btn_style = "danger"
                 else:
                     btn_style = "primary"
-                keyboard.append([{"text": f"{idx}. {prefix}«{item['title']}»", "callback_data": f"itm:{t_code}:{item['id']}", "style": btn_style}])
+                keyboard.append([{
+                    "text": f"{idx}. {prefix}«{item['title']}»",
+                    "callback_data": f"itm:{t_code}:{item['id']}",
+                    "style": btn_style
+                }])
 
             nav = []
             if page > 1:
-                nav.append({"text": t("btn_back", lang), "callback_data": f"srch:{page-1}:{session_id}", "style": "primary"})
+                nav.append({"text": t("btn_back", lang),
+                            "callback_data": f"srch:{page-1}:{session_id}",
+                            "style": "primary"})
             if page < total_pages:
-                nav.append({"text": t("btn_next", lang), "callback_data": f"srch:{page+1}:{session_id}", "style": "primary"})
+                nav.append({"text": t("btn_next", lang),
+                            "callback_data": f"srch:{page+1}:{session_id}",
+                            "style": "primary"})
             if nav:
                 keyboard.append(nav)
             edit_message(chat_id, message_id, reply_text, {"inline_keyboard": keyboard})
@@ -273,21 +291,38 @@ def handle_callback(cb):
         answer_callback(cb["id"])
         try:
             _, page_str, lat_str, lon_str = data.split(":", 3)
-            text, markup = get_nearby_companies(float(lat_str), float(lon_str), int(page_str), lang=lang)
+            text, markup = get_nearby_companies(float(lat_str), float(lon_str),
+                                                int(page_str), lang=lang)
             edit_message(chat_id, message_id, text, markup)
         except Exception as e:
             print(f"[loc callback] Қате: {e}, data={data}")
 
+    # ── itm: callback — нәтиже батырмасы басылғанда ─────────────────────────
     elif data.startswith("itm:"):
         parts = data.split(":")
         t_code, item_id = parts[1], parts[2]
         print(f"[itm callback] t_code={t_code}, item_id={item_id}, chat_id={chat_id}")
-        item = get_item_by_id(t_code, item_id)
-        print(f"[itm callback] item={'табылды' if item else 'ТАБЫЛМАДЫ'}")
-        if item:
-            answer_callback(cb["id"])
-            text, markup = format_detail_message(item, confidence='exact', lang=lang)
+
+        try:
+            item = get_item_by_id(t_code, item_id)
+            print(f"[itm callback] item={'табылды' if item else 'ТАБЫЛМАДЫ'}")
+
+            if not item:
+                answer_callback(cb["id"], text="Мәлімет табылмады 😔", show_alert=True)
+                return
+
+            # tier алдымен анықтаймыз
             has_access, tier = check_access(user_id, user_id == SYMBAT_ID)
+            print(f"[itm callback] tier={tier}")
+
+            # Хабарламаны форматтаймыз
+            text, markup = format_detail_message(item, confidence='exact',
+                                                 lang=lang, tier=tier)
+            print(f"[itm callback] msg_len={len(text)}")
+
+            # answer_callback ФОРМАТТАУДАН КЕЙІН — хабарлама дайын болғанда
+            answer_callback(cb["id"])
+
             effect = None
             reaction = None
             if tier in ["premium", "VIP"]:
@@ -295,19 +330,33 @@ def handle_callback(cb):
                 if "Белсенді" in status_text or "Рұқсат" in status_text or "Разрешено" in status_text:
                     effect = EFFECT_HALAL
                     reaction = "🎉"
-                elif "Мерзімі" in status_text or "⚠️" in status_text or "🚫" in status_text or "Қайтарып" in status_text:
+                elif ("Мерзімі" in status_text or "⚠️" in status_text
+                      or "🚫" in status_text or "Қайтарып" in status_text):
                     effect = EFFECT_EXPIRED
                     reaction = "👎"
+
             image_url = item.get("image_url", "")
             if image_url:
-                bot_msg_id = send_photo_message(chat_id, image_url, text, reply_markup=markup, message_effect_id=effect)
+                bot_msg_id = send_photo_message(chat_id, image_url, text,
+                                                reply_markup=markup,
+                                                message_effect_id=effect)
             else:
-                bot_msg_id = send_message(chat_id, text, reply_markup=markup, message_effect_id=effect)
+                bot_msg_id = send_message(chat_id, text,
+                                          reply_markup=markup,
+                                          message_effect_id=effect)
+
             print(f"[itm callback] bot_msg_id={bot_msg_id}")
             if reaction and bot_msg_id:
                 set_message_reaction(chat_id, bot_msg_id, reaction)
-        else:
-            answer_callback(cb["id"], text="Мәлімет табылмады 😔", show_alert=True)
+
+        except Exception as e:
+            import traceback
+            print(f"[itm callback] EXCEPTION: {e}")
+            traceback.print_exc()
+            try:
+                answer_callback(cb["id"], text="Қате орын алды 😔", show_alert=True)
+            except Exception:
+                pass
 
     # --- AI FEEDBACK ---
     elif data == "fb:good:ai":
@@ -361,15 +410,20 @@ def handle_callback(cb):
                 if item and item.get("map_link"):
                     new_kb.append([{"text": "🗺️ Картадан көру", "url": item["map_link"]}])
         suffix = data[7:]
-        new_kb.append([{"text": t("btn_bad_info", lang), "callback_data": f"fb:reason:info:{suffix}", "style": "danger"}])
-        new_kb.append([{"text": t("btn_bad_ai", lang), "callback_data": f"fb:reason:ai:{suffix}", "style": "danger"}])
-        new_kb.append([{"text": t("btn_bad_other", lang), "callback_data": f"fb:reason:other:{suffix}", "style": "danger"}])
+        new_kb.append([{"text": t("btn_bad_info", lang),
+                        "callback_data": f"fb:reason:info:{suffix}", "style": "danger"}])
+        new_kb.append([{"text": t("btn_bad_ai", lang),
+                        "callback_data": f"fb:reason:ai:{suffix}", "style": "danger"}])
+        new_kb.append([{"text": t("btn_bad_other", lang),
+                        "callback_data": f"fb:reason:other:{suffix}", "style": "danger"}])
         edit_reply_markup(chat_id, message_id, {"inline_keyboard": new_kb}, inline_msg_id)
 
     elif data.startswith("fb:reason:"):
         parts = data.split(":")
         reason_code = parts[2]
-        reason_text = "Қате ақпарат" if reason_code == "info" else "ЖИ қатесі" if reason_code == "ai" else "Басқа"
+        reason_text = ("Қате ақпарат" if reason_code == "info"
+                       else "ЖИ қатесі" if reason_code == "ai"
+                       else "Басқа")
         answer_callback(cb["id"], text=t("feedback_fixed", lang), show_alert=True)
         new_kb = []
         if not is_inline:
