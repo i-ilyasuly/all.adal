@@ -1,6 +1,7 @@
 import requests
 from bot_sender import send_message, send_invoice, answer_pre_checkout_query, send_gift_invoice
 from db_core import grant_premium, record_payment, log_to_bigquery, create_gift_code
+from quotes import get_quote
 from config import BOT_TOKEN
 
 def get_premium_keyboard(lang='kz'):
@@ -59,6 +60,9 @@ def process_successful_payment(message):
     if own_tariff:
         grant_premium(chat_id, days=own_tariff["days"])
         success_text = t("payment_success_own", lang, label=own_tariff["label"])
+        quote = get_quote("payment", lang)
+        if quote:
+            success_text += f"\n\n{quote}"
         send_message(chat_id, success_text, message_effect_id="5046509860389126442")
 
     # 2. СІЛТЕМЕ АРҚЫЛЫ СЫЙЛЫҚ (кез келген тариф)
