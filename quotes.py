@@ -66,11 +66,10 @@ def _format_kazakh(q: dict, lang: str) -> str:
         lines.append(f"<i>{desc}</i>")
 
     lines.append("")
-    if read_more:
-        label = "Толығырақ оқу →" if lang == "kz" else "Подробнее →"
-        lines.append(f'📚 maqal.kz · <a href="{read_more}">{label}</a>')
+    if lang == "kz":
+        lines.append("📚 Толығырақ · maqal.kz")
     else:
-        lines.append("📚 maqal.kz")
+        lines.append("📚 Подробнее · maqal.kz")
 
     inner = "\n".join(lines)
     return f"<blockquote expandable>{inner}</blockquote>"
