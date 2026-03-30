@@ -4,7 +4,8 @@ from config import BOT_TOKEN
 def send_message(chat_id, text, reply_markup=None, message_effect_id=None, reply_to_message_id=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML",
-               "link_preview_options": {"is_disabled": True}}
+               "link_preview_options": {"is_disabled": True},
+               "disable_web_page_preview": True}
     
     if reply_markup: 
         payload["reply_markup"] = reply_markup
@@ -83,6 +84,27 @@ def send_photo_message(chat_id, photo_url, caption, reply_markup=None,
     return send_message(chat_id, caption, reply_markup=reply_markup,
                         message_effect_id=message_effect_id,
                         reply_to_message_id=reply_to_message_id)
+
+def send_photo_bytes(chat_id, photo_bytes, caption):
+    """
+    Сурет bytes арқылы тікелей Telegram-ға жіберу.
+    GCS signed URL керек емес — multipart upload.
+    """
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
+    try:
+        resp = requests.post(
+            url,
+            data={"chat_id": chat_id, "caption": caption, "parse_mode": "HTML"},
+            files={"photo": ("photo.jpg", photo_bytes, "image/jpeg")}
+        ).json()
+        if resp.get("ok"):
+            return resp["result"]["message_id"]
+        print(f"[send_photo_bytes] Қате: {resp.get('description', '')}")
+        return send_message(chat_id, caption)
+    except Exception as e:
+        print(f"[send_photo_bytes] Қате: {e}")
+        return send_message(chat_id, caption)
+
 
 def edit_message(chat_id=None, message_id=None, text=None, reply_markup=None, inline_message_id=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText"
