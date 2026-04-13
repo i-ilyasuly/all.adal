@@ -142,9 +142,10 @@ def handle_message(msg):
                             is_premium=(tier in ["premium", "VIP"]))
             increment_usage(chat_id)
         else:
-            # Сурет жүктелмеді — placeholder-ді жою (қалдырмау)
+            # Сурет жүктелмеді — placeholder-ді жойып, қолданушыға хабарлаймыз
             if placeholder_id:
                 delete_message(chat_id, placeholder_id)
+            send_message(chat_id, t("photo_download_error", lang), reply_to_message_id=user_msg_id)
 
     elif "location" in msg:
         has_access, tier = check_access(chat_id, is_symbat)

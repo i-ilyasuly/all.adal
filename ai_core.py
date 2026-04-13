@@ -461,7 +461,7 @@ KFC вывескасы ("KFC" деп жазылған)            → {"product_
     try:
         response = model.generate_content(
             [prompt, image_parts[0]],
-            request_options={"timeout": 20}
+            request_options={"timeout": 90}
         )
         result_text = clean_json_string(response.text)
         return json.loads(result_text)

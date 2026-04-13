@@ -1,30 +1,70 @@
 import requests
 from config import BOT_TOKEN
 
+TG_MAX_LENGTH = 4096  # Telegram хабарлама лимиті
+
+def _truncate_text(text, limit=TG_MAX_LENGTH):
+    """Мәтін Telegram лимитінен асса — қысқартады (HTML тегтерді қауіпсіз жабады)."""
+    if len(text) <= limit:
+        return text
+    truncated = text[:limit - 30]
+    # Жабылмаған HTML тегтерді тазалау
+    open_tags = []
+    import re
+    for m in re.finditer(r'<(/?)(\w+)', truncated):
+        if m.group(1):  # closing tag
+            if open_tags and open_tags[-1] == m.group(2):
+                open_tags.pop()
+        else:
+            open_tags.append(m.group(2))
+    suffix = "\n\n<i>… (мәтін қысқартылды)</i>"
+    for tag in reversed(open_tags):
+        suffix = f"</{tag}>" + suffix
+    return truncated + suffix
+
+
 def send_message(chat_id, text, reply_markup=None, message_effect_id=None, reply_to_message_id=None):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML",
                "link_preview_options": {"is_disabled": True},
                "disable_web_page_preview": True}
-    
-    if reply_markup: 
+
+    if reply_markup:
         payload["reply_markup"] = reply_markup
-        
-    if message_effect_id: 
+
+    if message_effect_id:
         payload["message_effect_id"] = str(message_effect_id)
-        
+
     if reply_to_message_id:
         payload["reply_parameters"] = {"message_id": reply_to_message_id}
-    
+
     resp = requests.post(url, json=payload).json()
-    
+
     if resp.get("ok"):
         return resp["result"]["message_id"]
+
+    # Мәтін тым ұзын болса — қысқартып қайта жіберу
+    desc = resp.get("description", "").lower()
+    if "too long" in desc:
+        print(f"[send_message] Мәтін тым ұзын ({len(text)} символ), қысқартылады")
+        payload["text"] = _truncate_text(text)
+        resp = requests.post(url, json=payload).json()
+        if resp.get("ok"):
+            return resp["result"]["message_id"]
+
+    # Reply хабарлама табылмаса — reply-сіз қайта жіберу
+    if reply_to_message_id and "message" in desc and "not found" in desc:
+        print(f"[send_message] Reply message табылмады, reply-сіз жіберіледі")
+        payload.pop("reply_parameters", None)
+        resp = requests.post(url, json=payload).json()
+        if resp.get("ok"):
+            return resp["result"]["message_id"]
 
     # Эффект қабылдамаса — эффектсіз қайта жіберу
     if message_effect_id:
         print(f"Telegram Эффект қабылдамады: {resp}")
-        del payload["message_effect_id"]
+        payload.pop("message_effect_id", None)
+        payload.pop("reply_parameters", None)
         resp = requests.post(url, json=payload).json()
         if resp.get("ok"):
             return resp["result"]["message_id"]
@@ -59,7 +99,14 @@ def send_photo_message(chat_id, photo_url, caption, reply_markup=None,
     """
     Сурет + мәтін хабары жіберу (мекеме суреті үшін).
     Сурет жүктелмесе немесе қате болса — тікелей send_message шақырылады.
+    Caption лимиті 1024 символ — асса send_message-ге ауысады.
     """
+    # sendPhoto caption лимиті: 1024 символ
+    if len(caption) > 1024:
+        print(f"[send_photo_message] Caption тым ұзын ({len(caption)}), send_message-ге ауысады")
+        return send_message(chat_id, caption, reply_markup=reply_markup,
+                            message_effect_id=message_effect_id,
+                            reply_to_message_id=reply_to_message_id)
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
     payload = {
         "chat_id": chat_id,
@@ -78,6 +125,14 @@ def send_photo_message(chat_id, photo_url, caption, reply_markup=None,
 
     if resp.get("ok"):
         return resp["result"]["message_id"]
+
+    # Reply хабарлама табылмаса — reply-сіз қайта жіберу
+    if reply_to_message_id and "not found" in resp.get("description", "").lower():
+        print(f"[send_photo_message] Reply message табылмады, reply-сіз жіберіледі")
+        payload.pop("reply_parameters", None)
+        resp = requests.post(url, json=payload).json()
+        if resp.get("ok"):
+            return resp["result"]["message_id"]
 
     # Сурет жүктелмесе — fallback: тікелей мәтін хабары
     print(f"[send_photo_message] Сурет жүктелмеді, мәтін жіберіледі: {resp.get('description', '')}")
