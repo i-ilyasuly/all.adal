@@ -6,25 +6,34 @@ def send_message(chat_id, text, reply_markup=None, message_effect_id=None, reply
     payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML",
                "link_preview_options": {"is_disabled": True},
                "disable_web_page_preview": True}
-    
-    if reply_markup: 
+
+    if reply_markup:
         payload["reply_markup"] = reply_markup
-        
-    if message_effect_id: 
+
+    if message_effect_id:
         payload["message_effect_id"] = str(message_effect_id)
-        
+
     if reply_to_message_id:
         payload["reply_parameters"] = {"message_id": reply_to_message_id}
-    
+
     resp = requests.post(url, json=payload).json()
-    
+
     if resp.get("ok"):
         return resp["result"]["message_id"]
+
+    # Reply хабарлама табылмаса — reply-сіз қайта жіберу
+    if reply_to_message_id and "message" in resp.get("description", "").lower() and "not found" in resp.get("description", "").lower():
+        print(f"[send_message] Reply message табылмады, reply-сіз жіберіледі")
+        payload.pop("reply_parameters", None)
+        resp = requests.post(url, json=payload).json()
+        if resp.get("ok"):
+            return resp["result"]["message_id"]
 
     # Эффект қабылдамаса — эффектсіз қайта жіберу
     if message_effect_id:
         print(f"Telegram Эффект қабылдамады: {resp}")
-        del payload["message_effect_id"]
+        payload.pop("message_effect_id", None)
+        payload.pop("reply_parameters", None)
         resp = requests.post(url, json=payload).json()
         if resp.get("ok"):
             return resp["result"]["message_id"]
@@ -78,6 +87,14 @@ def send_photo_message(chat_id, photo_url, caption, reply_markup=None,
 
     if resp.get("ok"):
         return resp["result"]["message_id"]
+
+    # Reply хабарлама табылмаса — reply-сіз қайта жіберу
+    if reply_to_message_id and "not found" in resp.get("description", "").lower():
+        print(f"[send_photo_message] Reply message табылмады, reply-сіз жіберіледі")
+        payload.pop("reply_parameters", None)
+        resp = requests.post(url, json=payload).json()
+        if resp.get("ok"):
+            return resp["result"]["message_id"]
 
     # Сурет жүктелмесе — fallback: тікелей мәтін хабары
     print(f"[send_photo_message] Сурет жүктелмеді, мәтін жіберіледі: {resp.get('description', '')}")
