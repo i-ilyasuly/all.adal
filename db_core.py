@@ -84,10 +84,18 @@ def load_cache():
     if not cache_expired:
         return  # Кэш жаңа ✅
 
+    def _with_doc_id(doc):
+        # Firestore document_id-сы to_dict()-ке кірмейді — қолмен қосамыз.
+        # Бұл id callback батырмасында тұрақты болуы үшін керек.
+        d = doc.to_dict() or {}
+        if not d.get("id"):
+            d["id"] = doc.id
+        return d
+
     comps = db.collection("companies").stream()
-    CACHE["companies"] = [c.to_dict() for c in comps]
+    CACHE["companies"] = [_with_doc_id(c) for c in comps]
     ings = db.collection("ingredients").stream()
-    CACHE["ingredients"] = [i.to_dict() for i in ings]
+    CACHE["ingredients"] = [_with_doc_id(i) for i in ings]
     CACHE["loaded"] = True
     CACHE["loaded_at"] = now
 
