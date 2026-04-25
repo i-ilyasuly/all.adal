@@ -1,4 +1,3 @@
-import uuid
 import re
 import calendar
 from datetime import datetime
@@ -78,7 +77,7 @@ def format_item_dict(data, type_name):
             image_url = fi.get("thumbnail", "") or fi.get("full", "") or ""
 
         return {
-            "id": str(data.get("id", uuid.uuid4().hex[:8])),
+            "id": str(data.get("id") or ""),
             "type": "Мекеме",
             "title": data.get("title") or data.get("legal_name", "Белгісіз"),
             "desc": data.get("legal_name", ""),
@@ -106,7 +105,7 @@ def format_item_dict(data, type_name):
 
         item_title = data.get("title", "") or str(data.get("slug", "")).upper()
         return {
-            "id": str(data.get("id", uuid.uuid4().hex[:8])),
+            "id": str(data.get("id") or ""),
             "type": "Қоспа",
             "title": item_title,
             "desc": data.get("name", ""),
